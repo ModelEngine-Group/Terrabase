@@ -214,76 +214,68 @@ Terrabase 架构设计旨在实现以下目标：
       ```
     - **具体实现**: 使用common-base SDK集成完成具体实现
 
-#### 2.1.6 系统管理
-- **系统备份**
-- **LDAPS/LDAP**
-- **许可证管理**
-
-#### 2.1.7 通信与传输
-- **SMTP邮件**
-- **SFTP/FTPS**
-
-#### 2.1.8 远程支持
-- **Call Home**
-- **接入DME IQ**
-
-#### 2.1.9 网络管理
-- **SNMP配置**
-- **共享服务器**
-
-#### 2.1.10 任务与工作流
-- **任务管理**
-- **配置SSO**
-
 #### 2.1.11 告警系统
 - **告警管理**
-- **告警设置**
-- **告警上报**
-
-### 2.2 OMS集成业务梳理
-
-#### 2.2.1 系统配置
-- **系统信息管理**
-- **IP地址管理**
-- **时间配置**
-- **系统LOGO**
-
-#### 2.2.2 证书管理
-- **证书生命周期**
-- **证书存储**
-
-#### 2.2.3 操作日志
-- **日志记录**
-- **日志管理**
-
-#### 2.2.4 用户管理
-- **用户认证**
-- **密码管理**
-- **SSO单点登录**
-
-#### 2.2.5 第三方接入
-- **共享服务器**
-- **SFTP/FTP接入**
-- **DME IQ远程协助**
-- **syslog服务器**
-
-#### 2.2.6 密钥管理
-- **密钥生成**
-- **密钥存储**
-- **密钥使用**
+  - **注册告警定义**
+    - **接口定义**:
+      ```java
+      /**
+       * 注册告警定义接口
+       * @param eventDefine 告警定义对象
+       */
+      void registerEventDefine(EventDefine eventDefine);
+      ```
+    - **实现方式一**: 调用POST /monitor/v1/events/defines进行告警定义注册
+    - **实现方式二**: 调用MonitorSdkFeignClient.registerEventDefine方法，通过配置xml读取告警定义注册给monitor
+    - **功能说明**: 注册系统告警定义，支持REST接口和SDK两种方式
+  - **告警上报**
+    - **接口定义**:
+      ```java
+      /**
+       * 告警上报接口
+       * @param alarms 告警信息列表
+       */
+      void sendAlarmsBatch(List<AlarmInfo> alarms);
+      ```
+    - **实现方式一**: 调用POST /monitor/v1/events/service/send-alarm/internal进行告警上报
+    - **实现方式二**: 调用sendAlarmsBatch方法进行批量告警上报
+    - **功能说明**: 上报系统告警信息，支持单次和批量上报
+  - **告警查询**
+    - **接口定义**:
+      ```java
+      /**
+       * 分页查询告警接口
+       * @param queryParams 查询参数
+       * @return PageResult<EventInfo> 告警信息分页结果
+       */
+      PageResult<EventInfo> getEventsByPage(EventQueryParams queryParams);
+      
+      /**
+       * 根据ID查询告警详情接口
+       * @param alarmId 告警ID
+       * @return AlarmDetail 告警详细信息
+       */
+      AlarmDetail getAlarmDetailById(String alarmId);
+      ```
+    - **实现方式一**: 调用POST /monitor/v1/events进行告警查询
+    - **实现方式二**: 调用getEventsByPage、getAlarmDetailById方法进行告警查询
+    - **功能说明**: 查询系统告警信息，支持分页查询和详情查询
 
 ### 2.3 企业级特性实现架构
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    企业级特性管理模块                              │
-├─────────────────────────────────────────────────────────────────┤
-│  OMS对接管理  │  业务集成管理  │  特性开关控制  │  许可证管理    │
-│  - 服务注册   │  - 系统配置   │  - 动态配置   │  - 验证检查    │
-│  - 安全加密   │  - 用户管理   │  - 功能控制   │  - 特性解锁    │
-│  - 日志监控   │  - 第三方接入 │  - 权限控制   │  - 使用统计    │
-│  - 时间管理   │  - 密钥管理   │  - 审计日志   │  - 过期处理    │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    企业级特性管理模块                                         │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  OMS对接管理  │  安全与加密管理 │  日志与监控管理 │  时间与证书管理  │  告警与许可证管理 │
+│  - 服务注册   │  - KMC加解密   │  - 操作日志注册 │  - 时间配置管理   │  - 告警定义注册   │
+│  - 角色注册   │               │  - 日志上报     │  - 时间事件订阅   │  - 告警上报       │
+│  - 权限注册   │               │  - 审计日志     │  - 证书注册       │  - 告警查询       │
+│  - 菜单注册   │               │  - Syslog上报   │  - 证书导入/更新  │  - License管理    │
+│  - 菜单屏蔽   │                │                │  - CA证书导入     │                 │
+│               │                │                │  - HTTPS证书校验  │                 │
+│               │                │                │                 │                  │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 3. 系统架构
@@ -464,14 +456,14 @@ public interface DataProcessor {
      * @return 处理结果
      */
     Result process(Data data);
-  
+    
     /**
      * 批量处理数据
      * @param dataList 数据列表
      * @return 处理结果列表
      */
     List<Result> processBatch(List<Data> dataList);
-  
+    
     /**
      * 获取处理器能力
      * @return 能力描述
@@ -490,13 +482,13 @@ public interface FeatureToggle {
      * @return 是否启用
      */
     boolean isEnabled(String featureName);
-  
+    
     /**
      * 动态启用特性
      * @param featureName 特性名称
      */
     void enableFeature(String featureName);
-  
+    
     /**
      * 动态禁用特性
      * @param featureName 特性名称
@@ -515,13 +507,13 @@ public interface OpenSourceAdapter {
      * 初始化开源组件
      */
     void initialize();
-  
+    
     /**
      * 获取开源组件信息
      * @return 组件信息
      */
     ComponentInfo getComponentInfo();
-  
+    
     /**
      * 执行开源算法
      * @param algorithm 算法名称
@@ -541,13 +533,13 @@ public interface CommercialAdapter {
      * @return 验证结果
      */
     LicenseValidationResult validateLicense();
-  
+    
     /**
      * 获取商业特性列表
      * @return 特性列表
      */
     List<CommercialFeature> getAvailableFeatures();
-  
+    
     /**
      * 执行商业算法
      * @param feature 商业特性
