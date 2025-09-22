@@ -30,18 +30,6 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Spring Boot Starter Data JPA -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-
-        <!-- Spring Boot Starter Security -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-
         <!-- Spring Boot Starter Validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -55,11 +43,11 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- 数据库驱动 -->
+        <!-- 开源版企业服务实现（直接依赖） -->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
-            <scope>runtime</scope>
+            <groupId>com.terrabase</groupId>
+            <artifactId>enterprise-impl-open</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <!-- 测试依赖 -->
@@ -69,11 +57,6 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
