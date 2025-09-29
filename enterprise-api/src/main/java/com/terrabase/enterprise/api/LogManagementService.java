@@ -1,13 +1,15 @@
 package com.terrabase.enterprise.api;
 
+import com.terrabase.enterprise.api.dto.*;
+
 /**
- * 企业级服务接口
- * 定义企业级功能的核心接口，组合各个子服务
+ * 日志管理服务接口
+ * 提供操作日志的国际化注册和上报功能
  * 
  * @author Terrabase Team
  * @version 1.0.0
  */
-public interface EnterpriseService {
+public interface LogManagementService {
     
     /**
      * 获取服务名称
@@ -51,4 +53,17 @@ public interface EnterpriseService {
      */
     boolean isRunning();
 
+    // ========== 日志与监控相关接口 ==========
+    
+    /**
+     * 操作日志国际化信息注册接口
+     * @param logI18NS 国际化日志信息对象
+     */
+    void registerOperateLogI18N(LogI18NS logI18NS);
+    
+    /**
+     * 上报操作日志接口
+     * @param logs 操作日志信息对象
+     */
+    void reportOperateLog(Logs logs);
 }

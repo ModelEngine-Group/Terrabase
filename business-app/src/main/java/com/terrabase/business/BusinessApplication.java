@@ -9,6 +9,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * Terrabase 业务应用主启动类
@@ -31,6 +32,14 @@ public class BusinessApplication {
     public static void main(String[] args) {
         logger.info("正在启动 Terrabase 业务应用...");
         SpringApplication.run(BusinessApplication.class, args);
+    }
+    
+    /**
+     * 配置RestTemplate Bean
+     */
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
     
     /**

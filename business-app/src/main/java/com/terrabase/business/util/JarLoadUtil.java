@@ -1,6 +1,6 @@
 package com.terrabase.business.util;
 
-import com.terrabase.enterprise.api.EnterpriseService;
+import com.terrabase.enterprise.api.*;
 import com.terrabase.enterprise.impl.open.OpenEnterpriseServiceImpl;
 import com.terrabase.enterprise.impl.open.config.KmcConfig;
 import org.slf4j.Logger;
@@ -31,11 +31,172 @@ public class JarLoadUtil {
     @Value("${enterprise.jar.path:./lib}")
     private String jarPath;
     
+    @Value("${terrabase.commercial.oms.base.url}")
+    private String omsBaseUrl;
+    
+    @Value("${terrabase.commercial.timeout:30000}")
+    private int timeout;
+    
     @Autowired
     private ApplicationContext applicationContext;
     
     // 缓存已加载的实例
-    private final ConcurrentHashMap<String, EnterpriseService> serviceInstances = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Object> serviceInstances = new ConcurrentHashMap<>();
+    
+    /**
+     * 加载加解密服务
+     * @return 加解密服务实例
+     */
+    public CryptoService loadCryptoService() {
+        return (CryptoService) loadService("crypto_service", 
+            "com.terrabase.enterprise.impl.commercial.CommercialCryptoServiceImpl",
+            "com.terrabase.enterprise.impl.open.OpenCryptoServiceImpl");
+    }
+    
+    /**
+     * 加载用户管理服务
+     * @return 用户管理服务实例
+     */
+    public UserManagementService loadUserManagementService() {
+        return (UserManagementService) loadService("user_management_service",
+            "com.terrabase.enterprise.impl.commercial.CommercialUserManagementServiceImpl",
+            "com.terrabase.enterprise.impl.open.OpenUserManagementServiceImpl");
+    }
+    
+    /**
+     * 加载日志管理服务
+     * @return 日志管理服务实例
+     */
+    public LogManagementService loadLogManagementService() {
+        return (LogManagementService) loadService("log_management_service",
+            "com.terrabase.enterprise.impl.commercial.CommercialLogManagementServiceImpl",
+            "com.terrabase.enterprise.impl.open.OpenLogManagementServiceImpl");
+    }
+    
+    /**
+     * 加载证书管理服务
+     * @return 证书管理服务实例
+     */
+    public CertificateService loadCertificateService() {
+        return (CertificateService) loadService("certificate_service",
+            "com.terrabase.enterprise.impl.commercial.CommercialCertificateServiceImpl",
+            "com.terrabase.enterprise.impl.open.OpenCertificateServiceImpl");
+    }
+    
+    /**
+     * 加载监控告警服务
+     * @return 监控告警服务实例
+     */
+    public MonitoringService loadMonitoringService() {
+        return (MonitoringService) loadService("monitoring_service",
+            "com.terrabase.enterprise.impl.commercial.CommercialMonitoringServiceImpl",
+            "com.terrabase.enterprise.impl.open.OpenMonitoringServiceImpl");
+    }
+    
+    /**
+     * 通用服务加载方法
+     * @param cacheKey 缓存键
+     * @param commercialClassName 商业版类名
+     * @param openClassName 开源版类名
+     * @return 服务实例
+     */
+    private Object loadService(String cacheKey, String commercialClassName, String openClassName) {
+        try {
+            // 先检查缓存
+            Object cachedService = serviceInstances.get(cacheKey);
+            if (cachedService != null) {
+                logger.info("从缓存中获取服务实例: {}", cacheKey);
+                return cachedService;
+            }
+            
+            logger.info("开始检测并加载服务: {}", cacheKey);
+            
+            Object service;
+            if (isCommercialJarAvailable()) {
+                logger.info("检测到商业版JAR包，加载商业版服务: {}", commercialClassName);
+                service = loadServiceFromJar(commercialClassName);
+            } else {
+                logger.info("未检测到商业版JAR包，使用开源版服务: {}", openClassName);
+                service = loadServiceFromClasspath(openClassName);
+            }
+            
+            // 如果服务加载失败，使用开源版作为降级方案
+            if (service == null) {
+                logger.warn("服务加载失败，使用开源版作为降级方案: {}", openClassName);
+                service = loadServiceFromClasspath(openClassName);
+            }
+            
+            // 如果开源版也加载失败，抛出异常
+            if (service == null) {
+                throw new RuntimeException("无法加载任何服务实现: " + cacheKey);
+            }
+            
+            // 缓存服务实例
+            serviceInstances.put(cacheKey, service);
+            
+            // 自动启动服务
+            if (service instanceof com.terrabase.enterprise.api.EnterpriseService) {
+                ((com.terrabase.enterprise.api.EnterpriseService) service).start();
+                logger.info("企业服务已自动启动: {}", cacheKey);
+            } else if (service instanceof com.terrabase.enterprise.api.CryptoService) {
+                ((com.terrabase.enterprise.api.CryptoService) service).start();
+                logger.info("加密服务已自动启动: {}", cacheKey);
+            } else if (service instanceof com.terrabase.enterprise.api.UserManagementService) {
+                ((com.terrabase.enterprise.api.UserManagementService) service).start();
+                logger.info("用户管理服务已自动启动: {}", cacheKey);
+            } else if (service instanceof com.terrabase.enterprise.api.LogManagementService) {
+                ((com.terrabase.enterprise.api.LogManagementService) service).start();
+                logger.info("日志管理服务已自动启动: {}", cacheKey);
+            } else if (service instanceof com.terrabase.enterprise.api.CertificateService) {
+                ((com.terrabase.enterprise.api.CertificateService) service).start();
+                logger.info("证书管理服务已自动启动: {}", cacheKey);
+            } else if (service instanceof com.terrabase.enterprise.api.MonitoringService) {
+                ((com.terrabase.enterprise.api.MonitoringService) service).start();
+                logger.info("监控告警服务已自动启动: {}", cacheKey);
+            }
+            
+            logger.info("服务加载成功: {}", cacheKey);
+            
+            return service;
+            
+        } catch (Exception e) {
+            logger.error("加载服务失败: {}, 尝试使用开源版作为降级方案", cacheKey, e);
+            try {
+                // 最后的降级方案：直接实例化开源版服务
+                Object fallbackService = loadServiceFromClasspath(openClassName);
+                if (fallbackService != null) {
+                    serviceInstances.put(cacheKey, fallbackService);
+                    
+                    // 自动启动降级服务
+                    if (fallbackService instanceof com.terrabase.enterprise.api.EnterpriseService) {
+                        ((com.terrabase.enterprise.api.EnterpriseService) fallbackService).start();
+                        logger.info("降级企业服务已自动启动: {}", cacheKey);
+                    } else if (fallbackService instanceof com.terrabase.enterprise.api.CryptoService) {
+                        ((com.terrabase.enterprise.api.CryptoService) fallbackService).start();
+                        logger.info("降级加密服务已自动启动: {}", cacheKey);
+                    } else if (fallbackService instanceof com.terrabase.enterprise.api.UserManagementService) {
+                        ((com.terrabase.enterprise.api.UserManagementService) fallbackService).start();
+                        logger.info("降级用户管理服务已自动启动: {}", cacheKey);
+                    } else if (fallbackService instanceof com.terrabase.enterprise.api.LogManagementService) {
+                        ((com.terrabase.enterprise.api.LogManagementService) fallbackService).start();
+                        logger.info("降级日志管理服务已自动启动: {}", cacheKey);
+                    } else if (fallbackService instanceof com.terrabase.enterprise.api.CertificateService) {
+                        ((com.terrabase.enterprise.api.CertificateService) fallbackService).start();
+                        logger.info("降级证书管理服务已自动启动: {}", cacheKey);
+                    } else if (fallbackService instanceof com.terrabase.enterprise.api.MonitoringService) {
+                        ((com.terrabase.enterprise.api.MonitoringService) fallbackService).start();
+                        logger.info("降级监控告警服务已自动启动: {}", cacheKey);
+                    }
+                    
+                    logger.warn("使用开源版服务作为降级方案: {}", cacheKey);
+                    return fallbackService;
+                }
+            } catch (Exception fallbackException) {
+                logger.error("降级方案也失败了: {}", cacheKey, fallbackException);
+            }
+            throw new RuntimeException("无法加载任何服务实现: " + cacheKey, e);
+        }
+    }
     
     /**
      * 根据lib目录下是否存在JAR包动态加载企业服务实现
@@ -46,7 +207,7 @@ public class JarLoadUtil {
             String cacheKey = "enterprise_service";
             
             // 先检查缓存
-            EnterpriseService cachedService = serviceInstances.get(cacheKey);
+            EnterpriseService cachedService = (EnterpriseService) serviceInstances.get(cacheKey);
             if (cachedService != null) {
                 logger.info("从缓存中获取企业服务实例");
                 return cachedService;
@@ -102,6 +263,11 @@ public class JarLoadUtil {
                 }
                 
                 serviceInstances.put("enterprise_service", fallbackService);
+                
+                // 自动启动降级企业服务
+                fallbackService.start();
+                logger.info("降级企业服务已自动启动");
+                
                 logger.warn("使用开源版企业服务作为降级方案");
                 return fallbackService;
             } catch (Exception fallbackException) {
@@ -199,11 +365,11 @@ public class JarLoadUtil {
     }
     
     /**
-     * 从JAR包加载服务
+     * 从JAR包加载服务（通用方法）
      * @param className 类名
      * @return 服务实例
      */
-    private EnterpriseService loadFromJar(String className) {
+    private Object loadServiceFromJar(String className) {
         try {
             String jarFileName = getJarFileName(className);
             File jarFile = new File(jarPath, jarFileName);
@@ -219,11 +385,35 @@ public class JarLoadUtil {
             URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, this.getClass().getClassLoader());
             
             Class<?> clazz = classLoader.loadClass(className);
-            Constructor<?> constructor = clazz.getDeclaredConstructor();
-            constructor.setAccessible(true);
             
-            Object instance = constructor.newInstance();
-            return (EnterpriseService) instance;
+            // 尝试使用带配置参数的构造函数
+            Object instance = null;
+            try {
+                // 首先尝试带配置参数的构造函数
+                Constructor<?> configConstructor = clazz.getDeclaredConstructor(
+                    Class.forName("org.springframework.web.client.RestTemplate"),
+                    String.class,
+                    int.class
+                );
+                configConstructor.setAccessible(true);
+                
+                // 创建RestTemplate实例
+                Object restTemplate = Class.forName("org.springframework.web.client.RestTemplate").newInstance();
+                
+                instance = configConstructor.newInstance(restTemplate, omsBaseUrl, timeout);
+                logger.info("使用配置参数创建商业版服务实例: omsBaseUrl={}, timeout={}", omsBaseUrl, timeout);
+                
+            } catch (Exception configException) {
+                logger.debug("带配置参数的构造函数不可用，尝试默认构造函数: {}", configException.getMessage());
+                
+                // 如果带配置参数的构造函数不可用，使用默认构造函数
+                Constructor<?> defaultConstructor = clazz.getDeclaredConstructor();
+                defaultConstructor.setAccessible(true);
+                instance = defaultConstructor.newInstance();
+                logger.info("使用默认构造函数创建商业版服务实例");
+            }
+            
+            return instance;
             
         } catch (Exception e) {
             logger.warn("从JAR包加载失败: {}", e.getMessage());
@@ -232,24 +422,101 @@ public class JarLoadUtil {
     }
     
     /**
+     * 从类路径加载服务（通用方法）
+     * @param className 类名
+     * @return 服务实例
+     */
+    private Object loadServiceFromClasspath(String className) {
+        try {
+            logger.info("从类路径加载: {}", className);
+            
+            Class<?> clazz = Class.forName(className);
+            
+            // 尝试使用带配置参数的构造函数
+            Object instance = null;
+            try {
+                // 首先尝试带配置参数的构造函数
+                Constructor<?> configConstructor = clazz.getDeclaredConstructor(
+                    Class.forName("org.springframework.web.client.RestTemplate"),
+                    String.class,
+                    int.class
+                );
+                configConstructor.setAccessible(true);
+                
+                // 创建RestTemplate实例
+                Object restTemplate = Class.forName("org.springframework.web.client.RestTemplate").newInstance();
+                
+                instance = configConstructor.newInstance(restTemplate, omsBaseUrl, timeout);
+                logger.info("使用配置参数创建商业版服务实例: omsBaseUrl={}, timeout={}", omsBaseUrl, timeout);
+                
+            } catch (Exception configException) {
+                logger.debug("带配置参数的构造函数不可用，尝试默认构造函数: {}", configException.getMessage());
+                
+                // 如果带配置参数的构造函数不可用，使用默认构造函数
+                Constructor<?> defaultConstructor = clazz.getDeclaredConstructor();
+                defaultConstructor.setAccessible(true);
+                instance = defaultConstructor.newInstance();
+                logger.info("使用默认构造函数创建服务实例");
+            }
+            
+            // 手动注入依赖
+            injectDependencies(instance, className);
+            
+            return instance;
+            
+        } catch (Exception e) {
+            logger.warn("从类路径加载失败: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * 从JAR包加载服务
+     * @param className 类名
+     * @return 服务实例
+     */
+    private EnterpriseService loadFromJar(String className) {
+        return (EnterpriseService) loadServiceFromJar(className);
+    }
+    
+    /**
      * 从类路径加载服务
      * @param className 类名
      * @return 服务实例
      */
     private EnterpriseService loadFromClasspath(String className) {
+        return (EnterpriseService) loadServiceFromClasspath(className);
+    }
+    
+    /**
+     * 手动注入依赖
+     * @param instance 服务实例
+     * @param className 类名
+     */
+    private void injectDependencies(Object instance, String className) {
         try {
-            logger.info("从类路径加载: {}", className);
+            // 为 OpenCryptoServiceImpl 注入 KmcConfig
+            if (className.contains("OpenCryptoServiceImpl")) {
+                try {
+                    KmcConfig kmcConfig = applicationContext.getBean(KmcConfig.class);
+                    if (kmcConfig != null) {
+                        java.lang.reflect.Field kmcConfigField = instance.getClass().getDeclaredField("kmcConfig");
+                        kmcConfigField.setAccessible(true);
+                        kmcConfigField.set(instance, kmcConfig);
+                        logger.info("成功注入 KmcConfig 到 OpenCryptoServiceImpl");
+                    } else {
+                        logger.warn("Spring容器中没有找到 KmcConfig Bean");
+                    }
+                } catch (Exception e) {
+                    logger.warn("注入 KmcConfig 失败: {}", e.getMessage());
+                }
+            }
             
-            Class<?> clazz = Class.forName(className);
-            Constructor<?> constructor = clazz.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            
-            Object instance = constructor.newInstance();
-            return (EnterpriseService) instance;
+            // 为其他服务注入依赖（如果需要）
+            // 可以在这里添加其他服务的依赖注入逻辑
             
         } catch (Exception e) {
-            logger.warn("从类路径加载失败: {}", e.getMessage());
-            return null;
+            logger.warn("依赖注入失败: {}", e.getMessage());
         }
     }
     

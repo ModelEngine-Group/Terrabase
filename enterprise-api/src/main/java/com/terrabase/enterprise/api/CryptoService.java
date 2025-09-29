@@ -1,13 +1,15 @@
 package com.terrabase.enterprise.api;
 
+import com.terrabase.enterprise.api.dto.*;
+
 /**
- * 企业级服务接口
- * 定义企业级功能的核心接口，组合各个子服务
+ * 加解密服务接口
+ * 提供数据加密和解密功能
  * 
  * @author Terrabase Team
  * @version 1.0.0
  */
-public interface EnterpriseService {
+public interface CryptoService {
     
     /**
      * 获取服务名称
@@ -51,4 +53,19 @@ public interface EnterpriseService {
      */
     boolean isRunning();
 
+    /**
+     * 加密接口
+     * @param plaintext 明文数据
+     * @param algorithm 加密算法，如果为null则使用默认AES算法
+     * @return 密文数据
+     */
+    String encrypt(String plaintext, CryptoAlgorithm algorithm);
+
+    /**
+     * 解密接口
+     * @param ciphertext 密文数据
+     * @param algorithm 解密算法，如果为null则使用默认AES算法
+     * @return 明文数据
+     */
+    String decrypt(String ciphertext, CryptoAlgorithm algorithm);
 }

@@ -2,7 +2,6 @@ package com.terrabase.business.controller;
 
 import com.terrabase.business.util.JarLoadUtil;
 import com.terrabase.enterprise.api.EnterpriseService;
-import com.terrabase.enterprise.api.CryptoAlgorithm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,8 +12,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 企业服务控制器
- * 提供REST API接口来演示动态加载的企业服务功能
+ * 企业服务主控制器
+ * 负责企业服务的基础功能：服务信息、健康状态、配置管理、服务重载等
  * 
  * @author Terrabase Team
  * @version 1.0.0
@@ -132,101 +131,25 @@ public class EnterpriseController {
     }
     
     /**
-     * 数据加密接口
+     * 获取所有子服务信息概览
      */
-    @PostMapping("/encrypt")
-    public ResponseEntity<Map<String, Object>> encrypt(@RequestBody Map<String, String> request) {
+    @GetMapping("/services/overview")
+    public ResponseEntity<Map<String, Object>> getServicesOverview() {
         try {
-            String plaintext = request.get("plaintext");
-            String algorithmName = request.get("algorithm");
+            Map<String, Object> overview = new HashMap<>();
+            overview.put("enterpriseMode", jarLoadUtil.getEnterpriseMode());
+            overview.put("availableServices", new String[]{
+                "crypto", "userManagement", "logManagement", 
+                "certificate", "monitoring"
+            });
+            overview.put("timestamp", System.currentTimeMillis());
             
-            if (plaintext == null || plaintext.trim().isEmpty()) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("error", "明文数据不能为空");
-                return ResponseEntity.badRequest().body(error);
-            }
-            
-            EnterpriseService service = jarLoadUtil.loadEnterpriseService();
-            
-            // 解析算法参数，如果未提供则使用默认AES
-            CryptoAlgorithm algorithm = CryptoAlgorithm.fromString(algorithmName);
-            String result = service.encrypt(plaintext, algorithm);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("result", result);
-            response.put("serviceType", service.getServiceType());
-            response.put("algorithm", algorithm.getAlgorithm());
-            response.put("timestamp", System.currentTimeMillis());
-            
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(overview);
             
         } catch (Exception e) {
-            logger.error("数据加密失败", e);
+            logger.error("获取服务概览失败", e);
             Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", "数据加密失败: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(error);
-        }
-    }
-    
-    /**
-     * 数据解密接口
-     */
-    @PostMapping("/decrypt")
-    public ResponseEntity<Map<String, Object>> decrypt(@RequestBody Map<String, String> request) {
-        try {
-            String ciphertext = request.get("ciphertext");
-            String algorithmName = request.get("algorithm");
-            
-            if (ciphertext == null || ciphertext.trim().isEmpty()) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("error", "密文数据不能为空");
-                return ResponseEntity.badRequest().body(error);
-            }
-            
-            EnterpriseService service = jarLoadUtil.loadEnterpriseService();
-            
-            // 解析算法参数，如果未提供则使用默认AES
-            CryptoAlgorithm algorithm = CryptoAlgorithm.fromString(algorithmName);
-            String result = service.decrypt(ciphertext, algorithm);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("result", result);
-            response.put("serviceType", service.getServiceType());
-            response.put("algorithm", algorithm.getAlgorithm());
-            response.put("timestamp", System.currentTimeMillis());
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("数据解密失败", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", "数据解密失败: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(error);
-        }
-    }
-    
-    /**
-     * 获取支持的加密算法列表
-     */
-    @GetMapping("/algorithms")
-    public ResponseEntity<Map<String, Object>> getSupportedAlgorithms() {
-        try {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("algorithms", CryptoAlgorithm.values());
-            response.put("timestamp", System.currentTimeMillis());
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            logger.error("获取支持的加密算法列表失败", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", "获取支持的加密算法列表失败: " + e.getMessage());
+            error.put("error", "获取服务概览失败: " + e.getMessage());
             return ResponseEntity.internalServerError().body(error);
         }
     }
