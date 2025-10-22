@@ -1,20 +1,23 @@
 package com.terrabase.enterprise.impl.open;
 
 import com.terrabase.enterprise.api.UserManagementService;
-import com.terrabase.enterprise.api.dto.*;
-import com.terrabase.enterprise.impl.open.config.KmcConfig;
+import com.terrabase.enterprise.api.dto.AuthorityInfo;
+import com.terrabase.enterprise.api.dto.LoginUserDto;
+import com.terrabase.enterprise.api.dto.ResourceGroup;
+import com.terrabase.enterprise.api.request.RoleRegisterVo;
+import com.terrabase.enterprise.api.response.ResultVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 开源版用户管理服务实现
  * 基于开源技术实现用户管理功能
- * 
- * @author Terrabase Team
+ *
+ * @author Yehong Pan
  * @version 1.0.0
  */
 @Service
@@ -22,204 +25,147 @@ public class OpenUserManagementServiceImpl implements UserManagementService {
     
     private static final Logger logger = LoggerFactory.getLogger(OpenUserManagementServiceImpl.class);
 
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    
-    @Autowired
-    private KmcConfig kmcConfig;
-    
-    @Override
-    public String getServiceName() {
-        return "Open Source User Management Service";
-    }
-    
-    @Override
-    public String getServiceVersion() {
-        return "1.0.0-open";
-    }
-    
-    @Override
-    public String getServiceType() {
-        return "open";
-    }
-
-    @Override
-    public String getHealthStatus() {
-        if (!running.get()) {
-            return "服务未运行";
-        }
-        
-        return String.format("开源版用户管理服务健康状态: 正常 (版本: %s, 类型: %s)", 
-                getServiceVersion(), getServiceType());
-    }
-
-    @Override
-    public void start() {
-        if (running.compareAndSet(false, true)) {
-            logger.info("开源版用户管理服务已启动");
-        } else {
-            logger.warn("开源版用户管理服务已经在运行中");
-        }
-    }
-
-    @Override
-    public void stop() {
-        if (running.compareAndSet(true, false)) {
-            logger.info("开源版用户管理服务已停止");
-        } else {
-            logger.warn("开源版用户管理服务已经停止");
-        }
-    }
-
-    @Override
-    public boolean isRunning() {
-        return running.get();
-    }
-
     // ========== 用户注册相关接口实现 ==========
     
     @Override
-    public void registerRole(RoleRegister roleRegister) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行角色注册操作");
-            return;
-        }
-        
+    public void batchRegisterRole(RoleRegisterVo roleRegister) {
         if (roleRegister == null) {
             logger.warn("角色注册对象不能为空");
             return;
         }
         
         try {
-            logger.info("开源版执行角色注册: {}", roleRegister);
-
-            logger.info("开源版角色注册成功 - 角色ID: {}, 角色名称: {}, 应用场景: {}", 
-                    roleRegister.getRoleId(), roleRegister.getRoleName(), roleRegister.getApplicationScenario());
+            logger.info("开源版执行批量角色注册");
             
-            // 记录审计日志
-            if (kmcConfig.isEnableAuditLog()) {
-                logger.info("角色注册审计 - 角色ID: {}, 角色名称: {}, 角色类型: {}", 
-                        roleRegister.getRoleId(), roleRegister.getRoleName(), roleRegister.getRoleType());
+            // 处理角色注册信息列表
+            if (roleRegister.getRoleRegisterInfos() != null && !roleRegister.getRoleRegisterInfos().isEmpty()) {
+                logger.info("开源版处理角色注册信息，数量: {}", roleRegister.getRoleRegisterInfos().size());
+                
+                for (com.terrabase.enterprise.api.dto.RoleRegisterInfo roleInfo : roleRegister.getRoleRegisterInfos()) {
+                    logger.info("开源版角色注册成功 - 角色名: {}, 角色名代码: {}, 描述: {}, 可创建: {}, 支持登录类型: {}", 
+                            roleInfo.getName(), 
+                            roleInfo.getNameCode(), 
+                            roleInfo.getDescription(),
+                            roleInfo.isCreatable(),
+                            roleInfo.getSupportLoginType());
+                }
             }
             
+            // 处理角色国际化信息列表
+            if (roleRegister.getRoleI18nInfos() != null && !roleRegister.getRoleI18nInfos().isEmpty()) {
+                logger.info("开源版处理角色国际化信息，数量: {}", roleRegister.getRoleI18nInfos().size());
+                
+                for (com.terrabase.enterprise.api.dto.RoleI18nInfo i18nInfo : roleRegister.getRoleI18nInfos()) {
+                    logger.info("开源版角色国际化信息 - 角色名: {}, 代码: {}, 语言: {}, 内容: {}", 
+                            i18nInfo.getName(), 
+                            i18nInfo.getCode(), 
+                            i18nInfo.getLanguage(),
+                            i18nInfo.getContent());
+                }
+            }
+
         } catch (Exception e) {
-            logger.error("开源版角色注册失败: {}", roleRegister, e);
+            logger.error("开源版批量角色注册失败: {}", roleRegister, e);
         }
     }
     
     @Override
-    public void registerAuthority(AuthorityInfos authorityInfos) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行权限注册操作");
-            return;
-        }
-        
-        if (authorityInfos == null || authorityInfos.getAuthorityList() == null) {
-            logger.warn("权限注册对象不能为空");
+    public void registerPermission(List<AuthorityInfo> authorityInfos) {
+        if (authorityInfos == null || authorityInfos.isEmpty()) {
+            logger.warn("权限注册列表不能为空");
             return;
         }
         
         try {
-            logger.info("开源版执行权限注册，权限数量: {}", authorityInfos.getAuthorityList().size());
+            logger.info("开源版执行批量权限注册，权限数量: {}", authorityInfos.size());
 
-            for (AuthorityInfos.AuthorityInfo authorityInfo : authorityInfos.getAuthorityList()) {
-                logger.info("开源版权限注册成功 - 权限ID: {}, 权限名称: {}, 权限类型: {}", 
-                        authorityInfo.getAuthorityId(), authorityInfo.getAuthorityName(), authorityInfo.getAuthorityType());
+            for (AuthorityInfo authorityInfo : authorityInfos) {
+                logger.info("开源版权限注册成功 - 资源标识: {}, 描述: {}, 跳过检查: {}, 所需角色: {}", 
+                        authorityInfo.getResourceKey(), 
+                        authorityInfo.getDescription(), 
+                        authorityInfo.isSkipCheck(),
+                        authorityInfo.getRoles());
             }
-            
-            // 记录审计日志
-            if (kmcConfig.isEnableAuditLog()) {
-                logger.info("权限注册审计 - 权限数量: {}, 应用场景: {}", 
-                        authorityInfos.getAuthorityList().size(), authorityInfos.getApplicationScenario());
-            }
-            
+
         } catch (Exception e) {
-            logger.error("开源版权限注册失败: {}", authorityInfos, e);
+            logger.error("开源版批量权限注册失败: {}", authorityInfos, e);
         }
     }
     
     @Override
-    public void registerMenu(MenuRegisterInfo menuRegisterInfo) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行菜单注册操作");
-            return;
-        }
-        
-        if (menuRegisterInfo == null || menuRegisterInfo.getMenuList() == null) {
-            logger.warn("菜单注册对象不能为空");
-            return;
+    public List<ResourceGroup> getUserGroups(String userName) {
+        if (userName == null || userName.trim().isEmpty()) {
+            logger.warn("用户名不能为空");
+            return new ArrayList<>();
         }
         
         try {
-            logger.info("开源版执行菜单注册，菜单数量: {}", menuRegisterInfo.getMenuList().size());
-
-            for (MenuRegisterInfo.MenuInfo menuInfo : menuRegisterInfo.getMenuList()) {
-                logger.info("开源版菜单注册成功 - 菜单ID: {}, 菜单名称: {}, 菜单路径: {}", 
-                        menuInfo.getMenuId(), menuInfo.getMenuName(), menuInfo.getMenuPath());
-            }
+            logger.info("开源版获取用户资源组: {}", userName);
             
-            // 记录审计日志
-            if (kmcConfig.isEnableAuditLog()) {
-                logger.info("菜单注册审计 - 菜单数量: {}, 应用场景: {}", 
-                        menuRegisterInfo.getMenuList().size(), menuRegisterInfo.getApplicationScenario());
-            }
+            // 开源版实现：返回默认的公共资源组
+            List<ResourceGroup> groups = new ArrayList<>();
+            groups.add(ResourceGroup.buildPublicGroup());
+            
+            logger.info("开源版获取用户资源组成功 - 用户: {}, 资源组数量: {}", userName, groups.size());
+            
+            return groups;
             
         } catch (Exception e) {
-            logger.error("开源版菜单注册失败: {}", menuRegisterInfo, e);
+            logger.error("开源版获取用户资源组失败 - 用户: {}", userName, e);
+            return new ArrayList<>();
+        }
+    }
+
+    // ========== 用户认证相关接口实现 ==========
+    
+    @Override
+    public ResultVo<List<String>> queryRolesByToken() {
+        try {
+            logger.info("开源版执行根据token查询角色名");
+            
+            // 开源版实现：返回模拟的角色数据
+            List<String> roles = new java.util.ArrayList<>();
+            roles.add("admin");
+            roles.add("user");
+            roles.add("operator");
+            
+            logger.info("开源版根据token查询角色名成功，角色数量: {}", roles.size());
+            return ResultVo.success(roles);
+            
+        } catch (Exception e) {
+            logger.error("开源版根据token查询角色名失败", e);
+            return ResultVo.error("500", "角色查询失败: " + e.getMessage());
         }
     }
     
     @Override
-    public void registerMenuForbidden(ForbiddenBody forbiddenBody) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行菜单屏蔽注册操作");
-            return;
-        }
-        
-        if (forbiddenBody == null || forbiddenBody.getForbiddenMenuIds() == null) {
-            logger.warn("菜单屏蔽对象不能为空");
-            return;
-        }
-        
+    public ResultVo<List<LoginUserDto>> getCurrentUserInfo() {
         try {
-            logger.info("开源版执行菜单屏蔽注册，屏蔽菜单数量: {}", forbiddenBody.getForbiddenMenuIds().size());
-
-            for (String menuId : forbiddenBody.getForbiddenMenuIds()) {
-                logger.info("开源版菜单屏蔽注册成功 - 菜单ID: {}, 屏蔽原因: {}", menuId, forbiddenBody.getReason());
-            }
+            logger.info("开源版执行获取当前用户信息");
             
-            // 记录审计日志
-            if (kmcConfig.isEnableAuditLog()) {
-                logger.info("菜单屏蔽注册审计 - 屏蔽菜单数量: {}, 屏蔽原因: {}, 是否永久屏蔽: {}", 
-                        forbiddenBody.getForbiddenMenuIds().size(), forbiddenBody.getReason(), forbiddenBody.getPermanent());
-            }
+            // 开源版实现：返回模拟的用户信息
+            List<LoginUserDto> users = new java.util.ArrayList<>();
+            
+            LoginUserDto user = new LoginUserDto();
+            user.setUserName("admin");
+            user.setUserId("admin_001");
+            user.setRole("admin");
+            
+            // 设置资源组
+            List<ResourceGroup> resourceGroups = new java.util.ArrayList<>();
+            resourceGroups.add(ResourceGroup.buildPublicGroup());
+            user.setResourceGroups(resourceGroups);
+            users.add(user);
+            
+            logger.info("开源版获取当前用户信息成功，用户数量: {}", users.size());
+            return ResultVo.success(users);
             
         } catch (Exception e) {
-            logger.error("开源版菜单屏蔽注册失败: {}", forbiddenBody, e);
-        }
-    }
-
-    // ========== 时间管理相关接口实现 ==========
-    
-    @Override
-    public void subscribeTimeConfigChange(Subscribe subscribe) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行时间配置变更事件订阅操作");
-            return;
-        }
-        
-        if (subscribe == null) {
-            logger.warn("订阅信息对象不能为空");
-            return;
-        }
-        
-        try {
-            logger.info("开源版执行时间配置变更事件订阅: {}", subscribe);
-
-            logger.info("开源版时间配置变更事件订阅成功 - 订阅ID: {}, 服务名称: {}, 通知地址: {}", 
-                    subscribe.getSubscribeId(), subscribe.getServiceName(), subscribe.getNotifyAddress());
-            
-        } catch (Exception e) {
-            logger.error("开源版时间配置变更事件订阅失败: {}", subscribe, e);
+            logger.error("开源版获取当前用户信息失败", e);
+            return ResultVo.error("500", "用户信息查询失败: " + e.getMessage());
         }
     }
 }
+
+
+

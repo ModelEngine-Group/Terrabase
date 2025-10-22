@@ -14,8 +14,6 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
@@ -23,7 +21,7 @@ import java.util.Map;
  * KMC (Key Management Center) 加解密工具类
  * 基于开源算法实现数据加解密功能
  * 
- * @author Terrabase Team
+ * @author Yehong Pan
  * @version 1.0.0
  */
 public class KmcCryptoUtil {
@@ -90,16 +88,20 @@ public class KmcCryptoUtil {
     }
     
     /**
-     * 获取或创建密钥
+     * 获取或生成密钥
      * @param keyId 密钥ID
      * @return 密钥对象
      */
-    public static SecretKey getOrCreateKey(String keyId) {
-        return keyCache.computeIfAbsent(keyId, KmcCryptoUtil::generateKey);
+    public static SecretKey getOrGenerateKey(String keyId) {
+        SecretKey key = keyCache.get(keyId);
+        if (key == null) {
+            key = generateAndCacheKey(keyId);
+        }
+        return key;
     }
     
     /**
-     * 加密数据
+     * 使用指定密钥加密数据
      * @param plaintext 明文数据
      * @param keyId 密钥ID
      * @return 加密后的Base64编码字符串
@@ -110,33 +112,27 @@ public class KmcCryptoUtil {
         }
         
         try {
-            SecretKey key = getOrCreateKey(keyId);
+            SecretKey key = getOrGenerateKey(keyId);
             
             // 生成随机IV
             byte[] iv = new byte[GCM_IV_LENGTH];
             secureRandom.nextBytes(iv);
             
-            // 创建GCM参数规范
-            GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
-            
-            // 初始化加密器
+            // 创建Cipher对象
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
             cipher.init(Cipher.ENCRYPT_MODE, key, gcmSpec);
             
-            // 执行加密
-            byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+            // 加密数据
+            byte[] encryptedBytes = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
             
-            // 将IV和密文组合
-            byte[] encryptedData = new byte[GCM_IV_LENGTH + ciphertext.length];
-            System.arraycopy(iv, 0, encryptedData, 0, GCM_IV_LENGTH);
-            System.arraycopy(ciphertext, 0, encryptedData, GCM_IV_LENGTH, ciphertext.length);
+            // 将IV和加密数据组合
+            byte[] combined = new byte[GCM_IV_LENGTH + encryptedBytes.length];
+            System.arraycopy(iv, 0, combined, 0, GCM_IV_LENGTH);
+            System.arraycopy(encryptedBytes, 0, combined, GCM_IV_LENGTH, encryptedBytes.length);
             
             // 返回Base64编码的结果
-            String result = Base64.encodeBase64String(encryptedData);
-            logger.debug("数据加密成功，密钥ID: {}, 原文长度: {}, 密文长度: {}", 
-                    keyId, plaintext.length(), result.length());
-            
-            return result;
+            return Base64.encodeBase64String(combined);
             
         } catch (Exception e) {
             logger.error("数据加密失败，密钥ID: {}", keyId, e);
@@ -145,7 +141,7 @@ public class KmcCryptoUtil {
     }
     
     /**
-     * 解密数据
+     * 使用指定密钥解密数据
      * @param ciphertext 密文数据（Base64编码）
      * @param keyId 密钥ID
      * @return 解密后的明文数据
@@ -156,37 +152,25 @@ public class KmcCryptoUtil {
         }
         
         try {
-            SecretKey key = getOrCreateKey(keyId);
+            SecretKey key = getOrGenerateKey(keyId);
             
             // 解码Base64
-            byte[] encryptedData = Base64.decodeBase64(ciphertext);
+            byte[] combined = Base64.decodeBase64(ciphertext);
             
-            // 检查数据长度
-            if (encryptedData.length < GCM_IV_LENGTH) {
-                throw new IllegalArgumentException("密文数据格式错误");
-            }
-            
-            // 提取IV和密文
+            // 分离IV和加密数据
             byte[] iv = new byte[GCM_IV_LENGTH];
-            byte[] cipherBytes = new byte[encryptedData.length - GCM_IV_LENGTH];
-            System.arraycopy(encryptedData, 0, iv, 0, GCM_IV_LENGTH);
-            System.arraycopy(encryptedData, GCM_IV_LENGTH, cipherBytes, 0, cipherBytes.length);
+            byte[] encryptedBytes = new byte[combined.length - GCM_IV_LENGTH];
+            System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH);
+            System.arraycopy(combined, GCM_IV_LENGTH, encryptedBytes, 0, encryptedBytes.length);
             
-            // 创建GCM参数规范
-            GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
-            
-            // 初始化解密器
+            // 创建Cipher对象
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
             cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec);
             
-            // 执行解密
-            byte[] plaintext = cipher.doFinal(cipherBytes);
-            String result = new String(plaintext, StandardCharsets.UTF_8);
-            
-            logger.debug("数据解密成功，密钥ID: {}, 密文长度: {}, 原文长度: {}", 
-                    keyId, ciphertext.length(), result.length());
-            
-            return result;
+            // 解密数据
+            byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+            return new String(decryptedBytes, StandardCharsets.UTF_8);
             
         } catch (Exception e) {
             logger.error("数据解密失败，密钥ID: {}", keyId, e);
@@ -331,174 +315,221 @@ public class KmcCryptoUtil {
     
     /**
      * 对称加密
+     * @param plaintext 明文数据
+     * @param keyId 密钥ID
+     * @param algorithm 加密算法
+     * @return 加密后的Base64编码字符串
      */
-    private static String encryptSymmetric(String plaintext, String keyId, CryptoAlgorithm algorithm) throws Exception {
-        SecretKey key = getOrCreateSymmetricKey(keyId, algorithm);
-        
-        Cipher cipher = Cipher.getInstance(algorithm.getTransformation());
-        
-        if (algorithm == CryptoAlgorithm.AES) {
-            // AES使用GCM模式
-            byte[] iv = new byte[12]; // GCM IV长度
-            secureRandom.nextBytes(iv);
-            GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
-            cipher.init(Cipher.ENCRYPT_MODE, key, gcmSpec);
+    private static String encryptSymmetric(String plaintext, String keyId, CryptoAlgorithm algorithm) {
+        try {
+            SecretKey key = getOrGenerateKey(keyId);
             
-            byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-            
-            // 将IV和密文组合
-            byte[] encryptedData = new byte[iv.length + ciphertext.length];
-            System.arraycopy(iv, 0, encryptedData, 0, iv.length);
-            System.arraycopy(ciphertext, 0, encryptedData, iv.length, ciphertext.length);
-            
-            return Base64.encodeBase64String(encryptedData);
-        } else if (algorithm == CryptoAlgorithm.CHACHA20) {
-            // ChaCha20使用特殊的IV处理
-            byte[] iv = new byte[12]; // ChaCha20需要12字节的nonce
-            secureRandom.nextBytes(iv);
-            IvParameterSpec ivSpec = new IvParameterSpec(iv);
-            cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-            
-            byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-            
-            // 将IV和密文组合
-            byte[] encryptedData = new byte[iv.length + ciphertext.length];
-            System.arraycopy(iv, 0, encryptedData, 0, iv.length);
-            System.arraycopy(ciphertext, 0, encryptedData, iv.length, ciphertext.length);
-            
-            return Base64.encodeBase64String(encryptedData);
-        } else {
-            // 其他对称算法使用CBC模式
-            cipher.init(Cipher.ENCRYPT_MODE, key);
-            byte[] iv = cipher.getIV();
-            byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-            
-            // 将IV和密文组合
-            byte[] encryptedData = new byte[iv.length + ciphertext.length];
-            System.arraycopy(iv, 0, encryptedData, 0, iv.length);
-            System.arraycopy(ciphertext, 0, encryptedData, iv.length, ciphertext.length);
-            
-            return Base64.encodeBase64String(encryptedData);
+            // 根据算法选择不同的加密方式
+            if (algorithm == CryptoAlgorithm.AES) {
+                return encryptAES(plaintext, key);
+            } else if (algorithm == CryptoAlgorithm.DES) {
+                return encryptDES(plaintext, key);
+            } else if (algorithm == CryptoAlgorithm.TRIPLE_DES) {
+                return encryptTripleDES(plaintext, key);
+            } else if (algorithm == CryptoAlgorithm.BLOWFISH) {
+                return encryptBlowfish(plaintext, key);
+            } else {
+                // 默认使用AES
+                return encryptAES(plaintext, key);
+            }
+        } catch (Exception e) {
+            logger.error("对称加密失败，算法: {}", algorithm, e);
+            throw new RuntimeException("对称加密失败", e);
         }
     }
     
     /**
      * 对称解密
+     * @param ciphertext 密文数据
+     * @param keyId 密钥ID
+     * @param algorithm 解密算法
+     * @return 解密后的明文数据
      */
-    private static String decryptSymmetric(String ciphertext, String keyId, CryptoAlgorithm algorithm) throws Exception {
-        SecretKey key = getOrCreateSymmetricKey(keyId, algorithm);
-        
-        byte[] encryptedData = Base64.decodeBase64(ciphertext);
-        Cipher cipher = Cipher.getInstance(algorithm.getTransformation());
-        
-        if (algorithm == CryptoAlgorithm.AES) {
-            // AES使用GCM模式
-            byte[] iv = new byte[12];
-            byte[] cipherBytes = new byte[encryptedData.length - 12];
-            System.arraycopy(encryptedData, 0, iv, 0, 12);
-            System.arraycopy(encryptedData, 12, cipherBytes, 0, cipherBytes.length);
+    private static String decryptSymmetric(String ciphertext, String keyId, CryptoAlgorithm algorithm) {
+        try {
+            SecretKey key = getOrGenerateKey(keyId);
             
-            GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
-            cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec);
-            
-            byte[] plaintext = cipher.doFinal(cipherBytes);
-            return new String(plaintext, StandardCharsets.UTF_8);
-        } else if (algorithm == CryptoAlgorithm.CHACHA20) {
-            // ChaCha20使用特殊的IV处理
-            byte[] iv = new byte[12]; // ChaCha20需要12字节的nonce
-            byte[] cipherBytes = new byte[encryptedData.length - 12];
-            System.arraycopy(encryptedData, 0, iv, 0, 12);
-            System.arraycopy(encryptedData, 12, cipherBytes, 0, cipherBytes.length);
-            
-            IvParameterSpec ivSpec = new IvParameterSpec(iv);
-            cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
-            
-            byte[] plaintext = cipher.doFinal(cipherBytes);
-            return new String(plaintext, StandardCharsets.UTF_8);
-        } else {
-            // 其他对称算法使用CBC模式
-            byte[] iv = new byte[cipher.getBlockSize()];
-            byte[] cipherBytes = new byte[encryptedData.length - iv.length];
-            System.arraycopy(encryptedData, 0, iv, 0, iv.length);
-            System.arraycopy(encryptedData, iv.length, cipherBytes, 0, cipherBytes.length);
-            
-            IvParameterSpec ivSpec = new IvParameterSpec(iv);
-            cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
-            
-            byte[] plaintext = cipher.doFinal(cipherBytes);
-            return new String(plaintext, StandardCharsets.UTF_8);
+            // 根据算法选择不同的解密方式
+            if (algorithm == CryptoAlgorithm.AES) {
+                return decryptAES(ciphertext, key);
+            } else if (algorithm == CryptoAlgorithm.DES) {
+                return decryptDES(ciphertext, key);
+            } else if (algorithm == CryptoAlgorithm.TRIPLE_DES) {
+                return decryptTripleDES(ciphertext, key);
+            } else if (algorithm == CryptoAlgorithm.BLOWFISH) {
+                return decryptBlowfish(ciphertext, key);
+            } else {
+                // 默认使用AES
+                return decryptAES(ciphertext, key);
+            }
+        } catch (Exception e) {
+            logger.error("对称解密失败，算法: {}", algorithm, e);
+            throw new RuntimeException("对称解密失败", e);
         }
     }
     
     /**
-     * 非对称加密（RSA）
+     * AES加密
      */
-    private static String encryptAsymmetric(String plaintext, String keyId, CryptoAlgorithm algorithm) throws Exception {
-        KeyPair keyPair = getOrCreateKeyPair(keyId, algorithm);
-        PublicKey publicKey = keyPair.getPublic();
+    private static String encryptAES(String plaintext, SecretKey key) throws Exception {
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, new byte[GCM_IV_LENGTH]);
+        cipher.init(Cipher.ENCRYPT_MODE, key, gcmSpec);
         
-        Cipher cipher = Cipher.getInstance(algorithm.getTransformation());
-        cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+        byte[] encryptedBytes = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+        byte[] iv = cipher.getIV();
         
-        byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-        return Base64.encodeBase64String(ciphertext);
+        byte[] combined = new byte[iv.length + encryptedBytes.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+        
+        return Base64.encodeBase64String(combined);
     }
     
     /**
-     * 非对称解密（RSA）
+     * AES解密
      */
-    private static String decryptAsymmetric(String ciphertext, String keyId, CryptoAlgorithm algorithm) throws Exception {
-        KeyPair keyPair = getOrCreateKeyPair(keyId, algorithm);
-        PrivateKey privateKey = keyPair.getPrivate();
+    private static String decryptAES(String ciphertext, SecretKey key) throws Exception {
+        byte[] combined = Base64.decodeBase64(ciphertext);
+        byte[] iv = new byte[GCM_IV_LENGTH];
+        byte[] encryptedBytes = new byte[combined.length - GCM_IV_LENGTH];
         
-        Cipher cipher = Cipher.getInstance(algorithm.getTransformation());
-        cipher.init(Cipher.DECRYPT_MODE, privateKey);
+        System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH);
+        System.arraycopy(combined, GCM_IV_LENGTH, encryptedBytes, 0, encryptedBytes.length);
         
-        byte[] encryptedData = Base64.decodeBase64(ciphertext);
-        byte[] plaintext = cipher.doFinal(encryptedData);
-        return new String(plaintext, StandardCharsets.UTF_8);
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
+        cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec);
+        
+        byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
     }
     
     /**
-     * 获取或创建对称密钥
+     * DES加密
      */
-    private static SecretKey getOrCreateSymmetricKey(String keyId, CryptoAlgorithm algorithm) throws Exception {
-        String cacheKey = keyId + "_" + algorithm.name();
-        return keyCache.computeIfAbsent(cacheKey, k -> {
-            try {
-                KeyGenerator keyGenerator = KeyGenerator.getInstance(algorithm.getAlgorithm());
-                keyGenerator.init(algorithm.getDefaultKeyLength());
-                return keyGenerator.generateKey();
-            } catch (Exception e) {
-                throw new RuntimeException("生成对称密钥失败", e);
-            }
-        });
+    private static String encryptDES(String plaintext, SecretKey key) throws Exception {
+        Cipher cipher = Cipher.getInstance("DES/CBC/PKCS5Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        
+        byte[] encryptedBytes = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+        byte[] iv = cipher.getIV();
+        
+        byte[] combined = new byte[iv.length + encryptedBytes.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+        
+        return Base64.encodeBase64String(combined);
     }
     
     /**
-     * 获取或创建密钥对
+     * DES解密
      */
-    private static KeyPair getOrCreateKeyPair(String keyId, CryptoAlgorithm algorithm) throws Exception {
-        String cacheKey = keyId + "_" + algorithm.name();
-        return keyPairCache.computeIfAbsent(cacheKey, k -> {
-            try {
-                KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(algorithm.getAlgorithm());
-                keyPairGenerator.initialize(algorithm.getDefaultKeyLength());
-                return keyPairGenerator.generateKeyPair();
-            } catch (Exception e) {
-                throw new RuntimeException("生成密钥对失败", e);
-            }
-        });
+    private static String decryptDES(String ciphertext, SecretKey key) throws Exception {
+        byte[] combined = Base64.decodeBase64(ciphertext);
+        byte[] iv = new byte[8];
+        byte[] encryptedBytes = new byte[combined.length - 8];
+        
+        System.arraycopy(combined, 0, iv, 0, 8);
+        System.arraycopy(combined, 8, encryptedBytes, 0, encryptedBytes.length);
+        
+        Cipher cipher = Cipher.getInstance("DES/CBC/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
+        
+        byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
     }
     
     /**
-     * 清空所有密钥缓存
+     * 3DES加密
      */
-    public static void clearAllCaches() {
-        int symmetricCount = keyCache.size();
-        int asymmetricCount = keyPairCache.size();
-        keyCache.clear();
-        keyPairCache.clear();
-        logger.info("已清空所有密钥缓存，对称密钥: {}, 非对称密钥: {}", symmetricCount, asymmetricCount);
+    private static String encryptTripleDES(String plaintext, SecretKey key) throws Exception {
+        Cipher cipher = Cipher.getInstance("DESede/CBC/PKCS5Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        
+        byte[] encryptedBytes = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+        byte[] iv = cipher.getIV();
+        
+        byte[] combined = new byte[iv.length + encryptedBytes.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+        
+        return Base64.encodeBase64String(combined);
+    }
+    
+    /**
+     * 3DES解密
+     */
+    private static String decryptTripleDES(String ciphertext, SecretKey key) throws Exception {
+        byte[] combined = Base64.decodeBase64(ciphertext);
+        byte[] iv = new byte[8];
+        byte[] encryptedBytes = new byte[combined.length - 8];
+        
+        System.arraycopy(combined, 0, iv, 0, 8);
+        System.arraycopy(combined, 8, encryptedBytes, 0, encryptedBytes.length);
+        
+        Cipher cipher = Cipher.getInstance("DESede/CBC/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
+        
+        byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
+    }
+    
+    /**
+     * Blowfish加密
+     */
+    private static String encryptBlowfish(String plaintext, SecretKey key) throws Exception {
+        Cipher cipher = Cipher.getInstance("Blowfish/CBC/PKCS5Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        
+        byte[] encryptedBytes = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+        byte[] iv = cipher.getIV();
+        
+        byte[] combined = new byte[iv.length + encryptedBytes.length];
+        System.arraycopy(iv, 0, combined, 0, iv.length);
+        System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+        
+        return Base64.encodeBase64String(combined);
+    }
+    
+    /**
+     * Blowfish解密
+     */
+    private static String decryptBlowfish(String ciphertext, SecretKey key) throws Exception {
+        byte[] combined = Base64.decodeBase64(ciphertext);
+        byte[] iv = new byte[8];
+        byte[] encryptedBytes = new byte[combined.length - 8];
+        
+        System.arraycopy(combined, 0, iv, 0, 8);
+        System.arraycopy(combined, 8, encryptedBytes, 0, encryptedBytes.length);
+        
+        Cipher cipher = Cipher.getInstance("Blowfish/CBC/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
+        
+        byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
+    }
+    
+    /**
+     * 非对称加密
+     */
+    private static String encryptAsymmetric(String plaintext, String keyId, CryptoAlgorithm algorithm) {
+        // 简化实现，实际项目中需要更复杂的非对称加密逻辑
+        logger.warn("非对称加密暂未完全实现，使用对称加密替代");
+        return encryptSymmetric(plaintext, keyId, CryptoAlgorithm.AES);
+    }
+    
+    /**
+     * 非对称解密
+     */
+    private static String decryptAsymmetric(String ciphertext, String keyId, CryptoAlgorithm algorithm) {
+        // 简化实现，实际项目中需要更复杂的非对称解密逻辑
+        logger.warn("非对称解密暂未完全实现，使用对称解密替代");
+        return decryptSymmetric(ciphertext, keyId, CryptoAlgorithm.AES);
     }
 }

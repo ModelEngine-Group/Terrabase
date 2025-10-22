@@ -15,7 +15,7 @@ import java.util.Map;
  * 企业服务主控制器
  * 负责企业服务的基础功能：服务信息、健康状态、配置管理、服务重载等
  * 
- * @author Terrabase Team
+ * @author Yehong Pan
  * @version 1.0.0
  */
 @RestController
@@ -92,7 +92,6 @@ public class EnterpriseController {
             
             // 重新加载服务
             EnterpriseService service = jarLoadUtil.loadEnterpriseService();
-            service.start();
             
             Map<String, Object> response = new HashMap<>();
             response.put("message", "企业服务重新加载成功");

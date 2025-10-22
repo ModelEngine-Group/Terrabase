@@ -24,6 +24,20 @@
     </properties>
 
     <dependencies>
+        <!-- SDK Config 依赖 -->
+        <dependency>
+            <groupId>com.terrabase</groupId>
+            <artifactId>sdk-config</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Business App SDK 依赖 -->
+        <dependency>
+            <groupId>com.terrabase</groupId>
+            <artifactId>business-app</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Enterprise API 依赖 -->
         <dependency>
             <groupId>com.terrabase</groupId>
@@ -53,6 +67,23 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- Spring Cloud OpenFeign (starter) -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+        <!-- Spring Cloud LoadBalancer (starter) -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
 
         <!-- JSON processing -->
@@ -85,6 +116,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.32</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>

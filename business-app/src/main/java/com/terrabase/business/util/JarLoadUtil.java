@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 企业服务加载工具类
  * 用于根据配置加载商业版（JAR包）或开源版（直接依赖）的企业服务实现
  * 
- * @author Terrabase Team
+ * @author Yehong Pan
  * @version 1.0.0
  */
 @Component
@@ -30,12 +30,6 @@ public class JarLoadUtil {
     
     @Value("${enterprise.jar.path:./lib}")
     private String jarPath;
-    
-    @Value("${terrabase.commercial.oms.base.url}")
-    private String omsBaseUrl;
-    
-    @Value("${terrabase.commercial.timeout:30000}")
-    private int timeout;
     
     @Autowired
     private ApplicationContext applicationContext;
@@ -134,26 +128,7 @@ public class JarLoadUtil {
             // 缓存服务实例
             serviceInstances.put(cacheKey, service);
             
-            // 自动启动服务
-            if (service instanceof com.terrabase.enterprise.api.EnterpriseService) {
-                ((com.terrabase.enterprise.api.EnterpriseService) service).start();
-                logger.info("企业服务已自动启动: {}", cacheKey);
-            } else if (service instanceof com.terrabase.enterprise.api.CryptoService) {
-                ((com.terrabase.enterprise.api.CryptoService) service).start();
-                logger.info("加密服务已自动启动: {}", cacheKey);
-            } else if (service instanceof com.terrabase.enterprise.api.UserManagementService) {
-                ((com.terrabase.enterprise.api.UserManagementService) service).start();
-                logger.info("用户管理服务已自动启动: {}", cacheKey);
-            } else if (service instanceof com.terrabase.enterprise.api.LogManagementService) {
-                ((com.terrabase.enterprise.api.LogManagementService) service).start();
-                logger.info("日志管理服务已自动启动: {}", cacheKey);
-            } else if (service instanceof com.terrabase.enterprise.api.CertificateService) {
-                ((com.terrabase.enterprise.api.CertificateService) service).start();
-                logger.info("证书管理服务已自动启动: {}", cacheKey);
-            } else if (service instanceof com.terrabase.enterprise.api.MonitoringService) {
-                ((com.terrabase.enterprise.api.MonitoringService) service).start();
-                logger.info("监控告警服务已自动启动: {}", cacheKey);
-            }
+            // 服务已加载完成，无需手动启动
             
             logger.info("服务加载成功: {}", cacheKey);
             
@@ -167,26 +142,7 @@ public class JarLoadUtil {
                 if (fallbackService != null) {
                     serviceInstances.put(cacheKey, fallbackService);
                     
-                    // 自动启动降级服务
-                    if (fallbackService instanceof com.terrabase.enterprise.api.EnterpriseService) {
-                        ((com.terrabase.enterprise.api.EnterpriseService) fallbackService).start();
-                        logger.info("降级企业服务已自动启动: {}", cacheKey);
-                    } else if (fallbackService instanceof com.terrabase.enterprise.api.CryptoService) {
-                        ((com.terrabase.enterprise.api.CryptoService) fallbackService).start();
-                        logger.info("降级加密服务已自动启动: {}", cacheKey);
-                    } else if (fallbackService instanceof com.terrabase.enterprise.api.UserManagementService) {
-                        ((com.terrabase.enterprise.api.UserManagementService) fallbackService).start();
-                        logger.info("降级用户管理服务已自动启动: {}", cacheKey);
-                    } else if (fallbackService instanceof com.terrabase.enterprise.api.LogManagementService) {
-                        ((com.terrabase.enterprise.api.LogManagementService) fallbackService).start();
-                        logger.info("降级日志管理服务已自动启动: {}", cacheKey);
-                    } else if (fallbackService instanceof com.terrabase.enterprise.api.CertificateService) {
-                        ((com.terrabase.enterprise.api.CertificateService) fallbackService).start();
-                        logger.info("降级证书管理服务已自动启动: {}", cacheKey);
-                    } else if (fallbackService instanceof com.terrabase.enterprise.api.MonitoringService) {
-                        ((com.terrabase.enterprise.api.MonitoringService) fallbackService).start();
-                        logger.info("降级监控告警服务已自动启动: {}", cacheKey);
-                    }
+                    // 降级服务已加载完成，无需手动启动
                     
                     logger.warn("使用开源版服务作为降级方案: {}", cacheKey);
                     return fallbackService;
@@ -264,9 +220,8 @@ public class JarLoadUtil {
                 
                 serviceInstances.put("enterprise_service", fallbackService);
                 
-                // 自动启动降级企业服务
-                fallbackService.start();
-                logger.info("降级企业服务已自动启动");
+                // 降级企业服务已加载完成，无需手动启动
+                logger.info("降级企业服务已加载完成");
                 
                 logger.warn("使用开源版企业服务作为降级方案");
                 return fallbackService;
@@ -386,32 +341,11 @@ public class JarLoadUtil {
             
             Class<?> clazz = classLoader.loadClass(className);
             
-            // 尝试使用带配置参数的构造函数
-            Object instance = null;
-            try {
-                // 首先尝试带配置参数的构造函数
-                Constructor<?> configConstructor = clazz.getDeclaredConstructor(
-                    Class.forName("org.springframework.web.client.RestTemplate"),
-                    String.class,
-                    int.class
-                );
-                configConstructor.setAccessible(true);
-                
-                // 创建RestTemplate实例
-                Object restTemplate = Class.forName("org.springframework.web.client.RestTemplate").newInstance();
-                
-                instance = configConstructor.newInstance(restTemplate, omsBaseUrl, timeout);
-                logger.info("使用配置参数创建商业版服务实例: omsBaseUrl={}, timeout={}", omsBaseUrl, timeout);
-                
-            } catch (Exception configException) {
-                logger.debug("带配置参数的构造函数不可用，尝试默认构造函数: {}", configException.getMessage());
-                
-                // 如果带配置参数的构造函数不可用，使用默认构造函数
-                Constructor<?> defaultConstructor = clazz.getDeclaredConstructor();
-                defaultConstructor.setAccessible(true);
-                instance = defaultConstructor.newInstance();
-                logger.info("使用默认构造函数创建商业版服务实例");
-            }
+            // 仅使用默认构造函数创建实例
+            Constructor<?> defaultConstructor = clazz.getDeclaredConstructor();
+            defaultConstructor.setAccessible(true);
+            Object instance = defaultConstructor.newInstance();
+            logger.info("使用默认构造函数创建商业版服务实例");
             
             return instance;
             
@@ -432,32 +366,11 @@ public class JarLoadUtil {
             
             Class<?> clazz = Class.forName(className);
             
-            // 尝试使用带配置参数的构造函数
-            Object instance = null;
-            try {
-                // 首先尝试带配置参数的构造函数
-                Constructor<?> configConstructor = clazz.getDeclaredConstructor(
-                    Class.forName("org.springframework.web.client.RestTemplate"),
-                    String.class,
-                    int.class
-                );
-                configConstructor.setAccessible(true);
-                
-                // 创建RestTemplate实例
-                Object restTemplate = Class.forName("org.springframework.web.client.RestTemplate").newInstance();
-                
-                instance = configConstructor.newInstance(restTemplate, omsBaseUrl, timeout);
-                logger.info("使用配置参数创建商业版服务实例: omsBaseUrl={}, timeout={}", omsBaseUrl, timeout);
-                
-            } catch (Exception configException) {
-                logger.debug("带配置参数的构造函数不可用，尝试默认构造函数: {}", configException.getMessage());
-                
-                // 如果带配置参数的构造函数不可用，使用默认构造函数
-                Constructor<?> defaultConstructor = clazz.getDeclaredConstructor();
-                defaultConstructor.setAccessible(true);
-                instance = defaultConstructor.newInstance();
-                logger.info("使用默认构造函数创建服务实例");
-            }
+            // 仅使用默认构造函数创建实例
+            Constructor<?> defaultConstructor = clazz.getDeclaredConstructor();
+            defaultConstructor.setAccessible(true);
+            Object instance = defaultConstructor.newInstance();
+            logger.info("使用默认构造函数创建服务实例");
             
             // 手动注入依赖
             injectDependencies(instance, className);

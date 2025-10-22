@@ -1,181 +1,134 @@
 package com.terrabase.enterprise.api.dto;
 
-/**
- * 告警信息对象
- * 用于告警查询功能的数据传输对象
- * 
- * @author Terrabase Team
- * @version 1.0.0
- */
+import com.fasterxml.jackson.annotation.JsonAlias;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
+import lombok.*;
+import org.hibernate.validator.constraints.Length;
+
+import java.util.List;
+
+@Setter
+@Getter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class EventInfo {
-    
-    /**
-     * 告警ID
-     */
-    private String alarmId;
-    
-    /**
-     * 告警定义ID
-     */
-    private String eventDefineId;
-    
-    /**
-     * 告警名称
-     */
-    private String alarmName;
-    
-    /**
-     * 告警描述
-     */
-    private String alarmDescription;
-    
-    /**
-     * 告警级别
-     */
-    private String alarmLevel;
-    
-    /**
-     * 告警状态
-     */
-    private String alarmStatus;
-    
-    /**
-     * 触发时间
-     */
-    private Long triggerTime;
-    
-    /**
-     * 告警来源
-     */
-    private String alarmSource;
-    
-    /**
-     * 处理时间
-     */
-    private Long handleTime;
-    
-    /**
-     * 处理人
-     */
-    private String handler;
-    
-    /**
-     * 处理备注
-     */
-    private String handleRemark;
-    
-    public EventInfo() {}
-    
-    public EventInfo(String alarmId, String alarmName, String alarmLevel) {
-        this.alarmId = alarmId;
-        this.alarmName = alarmName;
-        this.alarmLevel = alarmLevel;
-    }
-    
-    public String getAlarmId() {
-        return alarmId;
-    }
-    
-    public void setAlarmId(String alarmId) {
-        this.alarmId = alarmId;
-    }
-    
-    public String getEventDefineId() {
-        return eventDefineId;
-    }
-    
-    public void setEventDefineId(String eventDefineId) {
-        this.eventDefineId = eventDefineId;
-    }
-    
-    public String getAlarmName() {
-        return alarmName;
-    }
-    
-    public void setAlarmName(String alarmName) {
-        this.alarmName = alarmName;
-    }
-    
-    public String getAlarmDescription() {
-        return alarmDescription;
-    }
-    
-    public void setAlarmDescription(String alarmDescription) {
-        this.alarmDescription = alarmDescription;
-    }
-    
-    public String getAlarmLevel() {
-        return alarmLevel;
-    }
-    
-    public void setAlarmLevel(String alarmLevel) {
-        this.alarmLevel = alarmLevel;
-    }
-    
-    public String getAlarmStatus() {
-        return alarmStatus;
-    }
-    
-    public void setAlarmStatus(String alarmStatus) {
-        this.alarmStatus = alarmStatus;
-    }
-    
-    public Long getTriggerTime() {
-        return triggerTime;
-    }
-    
-    public void setTriggerTime(Long triggerTime) {
-        this.triggerTime = triggerTime;
-    }
-    
-    public String getAlarmSource() {
-        return alarmSource;
-    }
-    
-    public void setAlarmSource(String alarmSource) {
-        this.alarmSource = alarmSource;
-    }
-    
-    public Long getHandleTime() {
-        return handleTime;
-    }
-    
-    public void setHandleTime(Long handleTime) {
-        this.handleTime = handleTime;
-    }
-    
-    public String getHandler() {
-        return handler;
-    }
-    
-    public void setHandler(String handler) {
-        this.handler = handler;
-    }
-    
-    public String getHandleRemark() {
-        return handleRemark;
-    }
-    
-    public void setHandleRemark(String handleRemark) {
-        this.handleRemark = handleRemark;
-    }
-    
-    @Override
-    public String toString() {
-        return "EventInfo{" +
-                "alarmId='" + alarmId + '\'' +
-                ", eventDefineId='" + eventDefineId + '\'' +
-                ", alarmName='" + alarmName + '\'' +
-                ", alarmDescription='" + alarmDescription + '\'' +
-                ", alarmLevel='" + alarmLevel + '\'' +
-                ", alarmStatus='" + alarmStatus + '\'' +
-                ", triggerTime=" + triggerTime +
-                ", alarmSource='" + alarmSource + '\'' +
-                ", handleTime=" + handleTime +
-                ", handler='" + handler + '\'' +
-                ", handleRemark='" + handleRemark + '\'' +
-                '}';
-    }
+    private @Pattern(
+            regexp = "^\\d{1,32}$",
+            message = "id is a number"
+    ) String id;
+
+    private @Pattern(
+            regexp = "^[A-Za-z0-9:_\\-=]{1,128}$",
+            message = "serialNumber is an uuid"
+    ) String serialNumber;
+
+    private Integer syncNo;
+
+    private @Length(
+            max = 255,
+            message = "eventName must less than 255"
+    ) String eventName;
+
+    private @NotEmpty @Pattern(
+            regexp = "^(alter|event)$"
+    ) String eventType;
+
+    private @NotBlank @Length(
+            max = 255,
+            message = "evenSubject must less than 255"
+    ) String eventSubject;
+
+    private @NotBlank @Length(
+            max = 255,
+            message = "evenSubjectType must less than 255"
+    ) String eventSubjectType;
+
+    private @Length(
+            max = 8000
+    ) String eventDescription;
+
+    private @Length(
+            max = 64
+    ) List<String> eventDescriptionArgs;
+
+    private @NotBlank @Pattern(
+            regexp = "warning|minor|major|critical"
+    ) String severity;
+
+    private @Length(
+            max = 8000
+    ) String effect;
+
+    private @NotBlank @Length(
+            max = 128,
+            message = "evenCategory must less than 255"
+    ) String eventCategory;
+
+    @JsonAlias({"possibleCause", "cause"})
+    private @Length(
+            max = 8000
+    ) String possibleCause;
+
+    private @Length(
+            max = 8000
+    ) String suggestion;
+
+    private @NotBlank @Pattern(
+            regexp = "Uncleared|Cleared",
+            message = "status must be Uncleared or Cleared"
+    ) String status;
+
+    private @Length(
+            max = 32
+    ) String firstOccurTime;
+
+    private @Length(
+            max = 32
+    ) String clearTime;
+
+    private @Length(
+            max = 255,
+            message = "eventSource must less than 255"
+    ) String evenSource;
+
+    private @Length(
+            max = 255,
+            message = "deviceSn must less than 255"
+    ) String deviceSn;
+
+    private @Length(
+            max = 255,
+            message = "deviceType must less than 255"
+    ) String deviceType;
+
+    private @Length(
+            max = 255
+    ) String devURL;
+
+    private @NotBlank @Length(
+            max = 64
+    ) String parts;
+
+    private @Pattern(
+            regexp = "^(zh|zh-cn|en|en-us)$"
+    ) String language;
+
+    private int computerCategory;
+
+    private boolean shouldDeleted;
+
+    private String clearType;
+
+    private String defineMatchKey;
+
+    private String lastEventMatchKey;
+
+    private Boolean shouldSaveDefine = true;
+
+    private String deviceId;
 }
 
 

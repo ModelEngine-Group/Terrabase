@@ -1,5 +1,6 @@
 package com.terrabase.business;
 
+import com.alibaba.nacos.common.tls.TlsSystemConfig;
 import com.terrabase.business.util.JarLoadUtil;
 import com.terrabase.enterprise.api.EnterpriseService;
 import org.slf4j.Logger;
@@ -15,11 +16,18 @@ import org.springframework.web.client.RestTemplate;
  * Terrabase 业务应用主启动类
  * 基于Spring Boot框架，支持动态加载企业服务实现
  * 
- * @author Terrabase Team
+ * @author Yehong Pan
  * @version 1.0.0
  */
 @SpringBootApplication
 public class BusinessApplication {
+//    static {
+//        // configure nacos SSL
+//        System.setProperty(TlsSystemConfig.TLS_ENABLE, "true");
+//        System.setProperty(TlsSystemConfig.CLIENT_AUTH, "true");
+//        System.setProperty(TlsSystemConfig.CLIENT_TRUST_CERT,
+//                "/opt/huawei/fce/runtime/security/server_cert/nacos/nacos.crt");
+//    }
     
     private static final Logger logger = LoggerFactory.getLogger(BusinessApplication.class);
     
@@ -63,16 +71,8 @@ public class BusinessApplication {
                     logger.info("  服务版本: {}", enterpriseService.getServiceVersion());
                     logger.info("  服务类型: {}", enterpriseService.getServiceType());
                     
-                    // 启动企业服务
-                    logger.info("正在启动企业服务...");
-                    enterpriseService.start();
-                    
-                    // 检查服务是否成功启动
-                    if (enterpriseService.isRunning()) {
-                        logger.info("企业服务启动成功");
-                    } else {
-                        logger.warn("企业服务启动失败");
-                    }
+                    // 企业服务已加载完成，无需手动启动
+                    logger.info("企业服务加载完成");
                         
                     // 获取健康状态
                     String healthStatus = enterpriseService.getHealthStatus();

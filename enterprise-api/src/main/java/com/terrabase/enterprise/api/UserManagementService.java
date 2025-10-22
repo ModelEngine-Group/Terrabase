@@ -1,89 +1,54 @@
 package com.terrabase.enterprise.api;
 
-import com.terrabase.enterprise.api.dto.*;
+import com.terrabase.enterprise.api.dto.AuthorityInfo;
+import com.terrabase.enterprise.api.dto.LoginUserDto;
+import com.terrabase.enterprise.api.dto.ResourceGroup;
+import com.terrabase.enterprise.api.request.RoleRegisterVo;
+import com.terrabase.enterprise.api.response.ResultVo;
+
+import java.util.List;
 
 /**
  * 用户管理服务接口
  * 提供角色、权限、菜单等用户管理功能
  * 
- * @author Terrabase Team
+ * @author Yehong Pan
  * @version 1.0.0
  */
 public interface UserManagementService {
-    
-    /**
-     * 获取服务名称
-     * @return 服务名称
-     */
-    String getServiceName();
-    
-    /**
-     * 获取服务版本
-     * @return 服务版本
-     */
-    String getServiceVersion();
-    
-    /**
-     * 获取服务类型（commercial 或 open）
-     * @return 服务类型
-     */
-    String getServiceType();
-
-    /**
-     * 获取服务健康状态
-     * @return 健康状态信息
-     */
-    String getHealthStatus();
-
-    /**
-     * 启动服务
-     * 将服务的running状态设置为true
-     */
-    void start();
-
-    /**
-     * 停止服务
-     * 将服务的running状态设置为false
-     */
-    void stop();
-
-    /**
-     * 检查服务是否正在运行
-     * @return true如果服务正在运行
-     */
-    boolean isRunning();
 
     // ========== 用户注册相关接口 ==========
     
     /**
-     * 角色注册接口
+     * 批量角色注册接口
      * @param roleRegister 角色注册对象
      */
-    void registerRole(RoleRegister roleRegister);
+    void batchRegisterRole(RoleRegisterVo roleRegister);
     
     /**
-     * 权限注册接口
-     * @param authorityInfos 权限信息对象
+     * 批量权限注册接口
+     * @param authorityInfos 权限信息列表
      */
-    void registerAuthority(AuthorityInfos authorityInfos);
+    void registerPermission(List<AuthorityInfo> authorityInfos);
     
     /**
-     * 菜单注册接口
-     * @param menuRegisterInfo 菜单注册信息对象
+     * 获取用户资源组列表
+     * @param userName 用户名
+     * @return 用户资源组列表
      */
-    void registerMenu(MenuRegisterInfo menuRegisterInfo);
-    
-    /**
-     * 菜单屏蔽注册接口
-     * @param forbiddenBody 菜单屏蔽信息对象
-     */
-    void registerMenuForbidden(ForbiddenBody forbiddenBody);
+    List<ResourceGroup> getUserGroups(String userName);
 
-    // ========== 时间管理相关接口 ==========
+    // ========== 用户认证相关接口 ==========
     
     /**
-     * 时间配置变更事件订阅接口
-     * @param subscribe 订阅信息对象
+     * 根据token查询角色名接口
+     * @return 角色名列表结果对象
      */
-    void subscribeTimeConfigChange(Subscribe subscribe);
+    ResultVo<List<String>> queryRolesByToken();
+    
+    /**
+     * 获取当前用户信息接口
+     * @return 当前用户信息结果对象
+     */
+    ResultVo<List<LoginUserDto>> getCurrentUserInfo();
 }

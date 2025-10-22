@@ -1,380 +1,200 @@
 package com.terrabase.enterprise.impl.commercial;
 
 import com.terrabase.enterprise.api.UserManagementService;
-import com.terrabase.enterprise.api.dto.*;
+import com.terrabase.enterprise.api.dto.AuthorityInfo;
+import com.terrabase.enterprise.api.dto.LoginUserDto;
+import com.terrabase.enterprise.api.dto.ResourceGroup;
+import com.terrabase.enterprise.api.request.RoleRegisterVo;
+import com.terrabase.enterprise.api.response.ResultVo;
+import com.terrabase.enterprise.impl.commercial.client.ManualAuthenticationClient;
+import com.terrabase.enterprise.impl.commercial.client.OmsExtensionClient;
+import com.terrabase.enterprise.impl.commercial.client.PermissionFeignClient;
+import com.terrabase.enterprise.impl.commercial.client.RoleFeignClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.RestClientException;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 商业版用户管理服务实现
  * 集成商业组件实现用户管理功能
  * 
- * @author Terrabase Team
+ * @author Yehong Pan
  * @version 1.0.0
  */
 @Service
 public class CommercialUserManagementServiceImpl implements UserManagementService {
     
     private static final Logger logger = LoggerFactory.getLogger(CommercialUserManagementServiceImpl.class);
+    
+    @Autowired
+    private OmsExtensionClient omsExtensionClient;
+    
+    @Autowired
+    private ManualAuthenticationClient manualAuthenticationClient;
+    
+    @Autowired
+    private RoleFeignClient roleFeignClient;
 
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    
-    private final RestTemplate restTemplate;
-    
-    private String omsBaseUrl;
-    private int timeout;
-    
-    public CommercialUserManagementServiceImpl(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
-        // 设置默认值
-        this.omsBaseUrl = "http://localhost:8081/api/";
-        this.timeout = 30000;
-    }
-    
-    public CommercialUserManagementServiceImpl(RestTemplate restTemplate, String omsBaseUrl, int timeout) {
-        this.restTemplate = restTemplate;
-        this.omsBaseUrl = omsBaseUrl;
-        this.timeout = timeout;
-    }
-    
-    @Override
-    public String getServiceName() {
-        return "Commercial User Management Service";
-    }
-    
-    @Override
-    public String getServiceVersion() {
-        return "1.0.0-commercial";
-    }
-    
-    @Override
-    public String getServiceType() {
-        return "commercial";
-    }
-    
-    @Override
-    public String getHealthStatus() {
-        if (!running.get()) {
-            return "服务未运行";
-        }
-        
-        return String.format("商业版用户管理服务健康状态: 正常 (版本: %s, 类型: %s)", 
-                getServiceVersion(), getServiceType());
-    }
-
-    @Override
-    public void start() {
-        if (running.compareAndSet(false, true)) {
-            logger.info("商业版用户管理服务已启动");
-        } else {
-            logger.warn("商业版用户管理服务已经在运行中");
-        }
-    }
-
-    @Override
-    public void stop() {
-        if (running.compareAndSet(true, false)) {
-            logger.info("商业版用户管理服务已停止");
-        } else {
-            logger.warn("商业版用户管理服务已经停止");
-        }
-    }
-
-    @Override
-    public boolean isRunning() {
-        return running.get();
-    }
+    @Autowired
+    private PermissionFeignClient permissionFeignClient;
 
     // ========== 用户注册相关接口实现 ==========
 
     @Override
-    public void registerRole(RoleRegister roleRegister) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行角色注册操作");
-            return;
-        }
-
+    public void batchRegisterRole(RoleRegisterVo roleRegister) {
         if (roleRegister == null) {
             logger.warn("角色注册对象不能为空");
             return;
         }
 
         try {
-            logger.info("商业版执行角色注册: {}", roleRegister);
+            logger.info("商业版执行批量角色注册");
             
-            // 构建请求参数
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("roleId", roleRegister.getRoleId());
-            requestBody.put("roleName", roleRegister.getRoleName());
-            requestBody.put("applicationScenario", roleRegister.getApplicationScenario());
-            requestBody.put("roleDescription", roleRegister.getRoleDescription());
+            // 使用 RoleFeignClient 调用远程服务进行批量角色注册
+            ResultVo<String> result = roleFeignClient.batchRegisterRole(roleRegister);
             
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-            
-            // 构建角色注册接口URL
-            String registerRoleUrl = omsBaseUrl + "/framework/v1/iam/roles/batch/register/internal";
-            
-            // 调用REST接口进行角色注册
-            ResponseEntity<Map> response = restTemplate.postForEntity(registerRoleUrl, requestEntity, Map.class);
-            
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Map<String, Object> responseBody = response.getBody();
-                String status = (String) responseBody.get("status");
+            if ("200".equals(result.getCode())) {
+                logger.info("商业版批量角色注册成功");
                 
-                if ("success".equals(status)) {
-                    logger.info("商业版REST接口角色注册成功 - 角色ID: {}, 角色名称: {}, 应用场景: {}",
-                            roleRegister.getRoleId(), roleRegister.getRoleName(), roleRegister.getApplicationScenario());
-                } else {
-                    String errorMsg = (String) responseBody.get("message");
-                    logger.error("商业版REST接口角色注册失败: {}", errorMsg);
-                }
-            } else {
-                logger.error("商业版REST接口角色注册失败，HTTP状态码: {}", response.getStatusCode());
-            }
-
-        } catch (RestClientException e) {
-            logger.error("商业版REST接口角色注册调用异常", e);
-        } catch (Exception e) {
-            logger.error("商业版角色注册失败: {}", roleRegister, e);
-        }
-    }
-
-    @Override
-    public void registerAuthority(AuthorityInfos authorityInfos) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行权限注册操作");
-            return;
-        }
-
-        if (authorityInfos == null || authorityInfos.getAuthorityList() == null) {
-            logger.warn("权限注册对象不能为空");
-            return;
-        }
-
-        try {
-            logger.info("商业版执行权限注册，权限数量: {}", authorityInfos.getAuthorityList().size());
-            
-            // 构建请求参数
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("authorityList", authorityInfos.getAuthorityList());
-            
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-            
-            // 构建权限注册接口URL
-            String registerAuthorityUrl = omsBaseUrl + "/framework/v1/iam/permission/batch/register/internal";
-            
-            // 调用REST接口进行权限注册
-            ResponseEntity<Map> response = restTemplate.postForEntity(registerAuthorityUrl, requestEntity, Map.class);
-            
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Map<String, Object> responseBody = response.getBody();
-                String status = (String) responseBody.get("status");
-                
-                if ("success".equals(status)) {
-                    logger.info("商业版REST接口权限注册成功，权限数量: {}", authorityInfos.getAuthorityList().size());
-                    for (AuthorityInfos.AuthorityInfo authorityInfo : authorityInfos.getAuthorityList()) {
-                        logger.info("商业版权限注册成功 - 权限ID: {}, 权限名称: {}, 权限类型: {}",
-                                authorityInfo.getAuthorityId(), authorityInfo.getAuthorityName(), authorityInfo.getAuthorityType());
+                // 记录角色注册信息
+                if (roleRegister.getRoleRegisterInfos() != null && !roleRegister.getRoleRegisterInfos().isEmpty()) {
+                    logger.info("商业版处理角色注册信息，数量: {}", roleRegister.getRoleRegisterInfos().size());
+                    
+                    for (com.terrabase.enterprise.api.dto.RoleRegisterInfo roleInfo : roleRegister.getRoleRegisterInfos()) {
+                        logger.info("商业版角色注册成功 - 角色名: {}, 角色名代码: {}, 描述: {}, 可创建: {}, 支持登录类型: {}", 
+                                roleInfo.getName(), 
+                                roleInfo.getNameCode(), 
+                                roleInfo.getDescription(),
+                                roleInfo.isCreatable(),
+                                roleInfo.getSupportLoginType());
                     }
-                } else {
-                    String errorMsg = (String) responseBody.get("message");
-                    logger.error("商业版REST接口权限注册失败: {}", errorMsg);
                 }
-            } else {
-                logger.error("商业版REST接口权限注册失败，HTTP状态码: {}", response.getStatusCode());
-            }
-            
-        } catch (RestClientException e) {
-            logger.error("商业版REST接口权限注册调用异常", e);
-        } catch (Exception e) {
-            logger.error("商业版权限注册失败: {}", authorityInfos, e);
-        }
-    }
-
-    @Override
-    public void registerMenu(MenuRegisterInfo menuRegisterInfo) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行菜单注册操作");
-            return;
-        }
-
-        if (menuRegisterInfo == null || menuRegisterInfo.getMenuList() == null) {
-            logger.warn("菜单注册对象不能为空");
-            return;
-        }
-
-        try {
-            logger.info("商业版执行菜单注册，菜单数量: {}", menuRegisterInfo.getMenuList().size());
-            
-            // 构建请求参数
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("menuList", menuRegisterInfo.getMenuList());
-            
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-            
-            // 构建菜单注册接口URL
-            String registerMenuUrl = omsBaseUrl + "/framework/v1/customize/menu/register/internal";
-            
-            // 调用REST接口进行菜单注册
-            ResponseEntity<Map> response = restTemplate.postForEntity(registerMenuUrl, requestEntity, Map.class);
-            
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Map<String, Object> responseBody = response.getBody();
-                String status = (String) responseBody.get("status");
                 
-                if ("success".equals(status)) {
-                    logger.info("商业版REST接口菜单注册成功，菜单数量: {}", menuRegisterInfo.getMenuList().size());
-                    for (MenuRegisterInfo.MenuInfo menuInfo : menuRegisterInfo.getMenuList()) {
-                        logger.info("商业版菜单注册成功 - 菜单ID: {}, 菜单名称: {}, 菜单路径: {}",
-                                menuInfo.getMenuId(), menuInfo.getMenuName(), menuInfo.getMenuPath());
+                // 记录角色国际化信息
+                if (roleRegister.getRoleI18nInfos() != null && !roleRegister.getRoleI18nInfos().isEmpty()) {
+                    logger.info("商业版处理角色国际化信息，数量: {}", roleRegister.getRoleI18nInfos().size());
+                    
+                    for (com.terrabase.enterprise.api.dto.RoleI18nInfo i18nInfo : roleRegister.getRoleI18nInfos()) {
+                        logger.info("商业版角色国际化信息 - 角色名: {}, 代码: {}, 语言: {}, 内容: {}", 
+                                i18nInfo.getName(), 
+                                i18nInfo.getCode(), 
+                                i18nInfo.getLanguage(),
+                                i18nInfo.getContent());
                     }
-                } else {
-                    String errorMsg = (String) responseBody.get("message");
-                    logger.error("商业版REST接口菜单注册失败: {}", errorMsg);
                 }
             } else {
-                logger.error("商业版REST接口菜单注册失败，HTTP状态码: {}", response.getStatusCode());
+                logger.error("商业版批量角色注册失败: {}", result.getMsg());
             }
 
-        } catch (RestClientException e) {
-            logger.error("商业版REST接口菜单注册调用异常", e);
         } catch (Exception e) {
-            logger.error("商业版菜单注册失败: {}", menuRegisterInfo, e);
+            logger.error("商业版批量角色注册失败: {}", roleRegister, e);
         }
     }
 
     @Override
-    public void registerMenuForbidden(ForbiddenBody forbiddenBody) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行菜单屏蔽注册操作");
-            return;
-        }
-
-        if (forbiddenBody == null || forbiddenBody.getForbiddenMenuIds() == null) {
-            logger.warn("菜单屏蔽对象不能为空");
+    public void registerPermission(List<AuthorityInfo> authorityInfos) {
+        if (authorityInfos == null || authorityInfos.isEmpty()) {
+            logger.warn("权限注册列表不能为空");
             return;
         }
 
         try {
-            logger.info("商业版执行菜单屏蔽注册，屏蔽菜单数量: {}", forbiddenBody.getForbiddenMenuIds().size());
+            logger.info("商业版执行批量权限注册，权限数量: {}", authorityInfos.size());
             
-            // 构建请求参数
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("forbiddenMenuIds", forbiddenBody.getForbiddenMenuIds());
-            requestBody.put("reason", forbiddenBody.getReason());
+            // 调用Feign客户端进行批量权限注册
+            ResultVo<String> result = permissionFeignClient.registerPermission(authorityInfos);
             
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-            
-            // 构建菜单屏蔽注册接口URL
-            String registerMenuForbiddenUrl = omsBaseUrl + "/framework/v1/customize/menu/register/forbidden/item/internal";
-            
-            // 调用REST接口进行菜单屏蔽注册
-            ResponseEntity<Map> response = restTemplate.postForEntity(registerMenuForbiddenUrl, requestEntity, Map.class);
-            
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Map<String, Object> responseBody = response.getBody();
-                String status = (String) responseBody.get("status");
-                
-                if ("success".equals(status)) {
-                    logger.info("商业版REST接口菜单屏蔽注册成功，屏蔽菜单数量: {}", forbiddenBody.getForbiddenMenuIds().size());
-                    for (String menuId : forbiddenBody.getForbiddenMenuIds()) {
-                        logger.info("商业版菜单屏蔽注册成功 - 菜单ID: {}, 屏蔽原因: {}", menuId, forbiddenBody.getReason());
-                    }
-                } else {
-                    String errorMsg = (String) responseBody.get("message");
-                    logger.error("商业版REST接口菜单屏蔽注册失败: {}", errorMsg);
+            if ("200".equals(result.getCode())) {
+                logger.info("商业版批量权限注册成功，权限数量: {}", authorityInfos.size());
+                for (AuthorityInfo authorityInfo : authorityInfos) {
+                    logger.info("商业版权限注册成功 - 资源标识: {}, 描述: {}, 跳过检查: {}, 所需角色: {}",
+                            authorityInfo.getResourceKey(), 
+                            authorityInfo.getDescription(), 
+                            authorityInfo.isSkipCheck(),
+                            authorityInfo.getRoles());
                 }
             } else {
-                logger.error("商业版REST接口菜单屏蔽注册失败，HTTP状态码: {}", response.getStatusCode());
+                logger.error("商业版批量权限注册失败: {}", result.getMsg());
             }
-
-        } catch (RestClientException e) {
-            logger.error("商业版REST接口菜单屏蔽注册调用异常", e);
+            
         } catch (Exception e) {
-            logger.error("商业版菜单屏蔽注册失败: {}", forbiddenBody, e);
+            logger.error("商业版批量权限注册失败: {}", authorityInfos, e);
         }
     }
-
-    // ========== 时间管理相关接口实现 ==========
-
+    
     @Override
-    public void subscribeTimeConfigChange(Subscribe subscribe) {
-        if (!running.get()) {
-            logger.warn("服务未运行，无法执行时间配置变更事件订阅操作");
-            return;
+    public List<ResourceGroup> getUserGroups(String userName) {
+        if (userName == null || userName.trim().isEmpty()) {
+            logger.warn("用户名不能为空");
+            return new ArrayList<>();
         }
-
-        if (subscribe == null) {
-            logger.warn("订阅信息对象不能为空");
-            return;
-        }
-
+        
         try {
-            logger.info("商业版执行时间配置变更事件订阅: {}", subscribe);
+            logger.info("商业版获取用户资源组: {}", userName);
             
-            // 构建请求参数
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("subscribeId", subscribe.getSubscribeId());
-            requestBody.put("serviceName", subscribe.getServiceName());
-            requestBody.put("notifyAddress", subscribe.getNotifyAddress());
-            requestBody.put("eventType", subscribe.getEventType());
+            // 使用FeignClient调用OMS扩展服务获取用户资源组
+            List<ResourceGroup> groups = omsExtensionClient.getUserGroups(userName);
             
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+            logger.info("商业版获取用户资源组成功 - 用户: {}, 资源组数量: {}", userName, groups.size());
             
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+            return groups;
             
-            // 构建时间配置变更事件订阅接口URL
-            String subscribeTimeConfigUrl = omsBaseUrl + "/framework/v1/iam/subscribe/internal";
-            
-            // 调用REST接口进行时间配置变更事件订阅
-            ResponseEntity<Map> response = restTemplate.postForEntity(subscribeTimeConfigUrl, requestEntity, Map.class);
-            
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Map<String, Object> responseBody = response.getBody();
-                String status = (String) responseBody.get("status");
-                
-                if ("success".equals(status)) {
-                    logger.info("商业版REST接口时间配置变更事件订阅成功 - 订阅ID: {}, 服务名称: {}, 通知地址: {}",
-                            subscribe.getSubscribeId(), subscribe.getServiceName(), subscribe.getNotifyAddress());
-                } else {
-                    String errorMsg = (String) responseBody.get("message");
-                    logger.error("商业版REST接口时间配置变更事件订阅失败: {}", errorMsg);
-                }
-            } else {
-                logger.error("商业版REST接口时间配置变更事件订阅失败，HTTP状态码: {}", response.getStatusCode());
-            }
-
-        } catch (RestClientException e) {
-            logger.error("商业版REST接口时间配置变更事件订阅调用异常", e);
         } catch (Exception e) {
-            logger.error("商业版时间配置变更事件订阅失败: {}", subscribe, e);
+            logger.error("商业版获取用户资源组失败 - 用户: {}", userName, e);
+            // 发生异常时返回默认的公共资源组
+            List<ResourceGroup> defaultGroups = new ArrayList<>();
+            defaultGroups.add(ResourceGroup.buildPublicGroup());
+            return defaultGroups;
+        }
+    }
+    
+    // ========== 用户认证相关接口实现 ==========
+    
+    @Override
+    public ResultVo<List<String>> queryRolesByToken() {
+        try {
+            logger.info("商业版执行根据token查询角色名");
+            
+            // 使用 Feign 客户端调用远程服务
+            ResultVo<List<String>> result = manualAuthenticationClient.queryRolesByToken();
+            
+            if ("200".equals(result.getCode())) {
+                logger.info("商业版根据token查询角色名成功，角色数量: {}", result.getData().size());
+                return result;
+            } else {
+                logger.error("商业版根据token查询角色名失败: {}", result.getMsg());
+                return ResultVo.error(result.getCode(), result.getMsg());
+            }
+            
+        } catch (Exception e) {
+            logger.error("商业版根据token查询角色名失败", e);
+            return ResultVo.error("500", "角色查询失败: " + e.getMessage());
+        }
+    }
+    
+    @Override
+    public ResultVo<List<LoginUserDto>> getCurrentUserInfo() {
+        try {
+            logger.info("商业版执行获取当前用户信息");
+            
+            // 使用 Feign 客户端调用远程服务
+            ResultVo<List<LoginUserDto>> result = manualAuthenticationClient.sessionCur();
+            
+            if ("200".equals(result.getCode())) {
+                logger.info("商业版获取当前用户信息成功，用户数量: {}", result.getData().size());
+                return result;
+            } else {
+                logger.error("商业版获取当前用户信息失败: {}", result.getMsg());
+                return ResultVo.error(result.getCode(), result.getMsg());
+            }
+            
+        } catch (Exception e) {
+            logger.error("商业版获取当前用户信息失败", e);
+            return ResultVo.error("500", "用户信息查询失败: " + e.getMessage());
         }
     }
 }

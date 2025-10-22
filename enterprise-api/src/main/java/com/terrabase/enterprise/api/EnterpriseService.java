@@ -4,7 +4,7 @@ package com.terrabase.enterprise.api;
  * 企业级服务接口
  * 定义企业级功能的核心接口，组合各个子服务
  * 
- * @author Terrabase Team
+ * @author Yehong Pan
  * @version 1.0.0
  */
 public interface EnterpriseService {
@@ -33,22 +33,5 @@ public interface EnterpriseService {
      */
     String getHealthStatus();
 
-    /**
-     * 启动服务
-     * 将服务的running状态设置为true
-     */
-    void start();
-
-    /**
-     * 停止服务
-     * 将服务的running状态设置为false
-     */
-    void stop();
-
-    /**
-     * 检查服务是否正在运行
-     * @return true如果服务正在运行
-     */
-    boolean isRunning();
 
 }
