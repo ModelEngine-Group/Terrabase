@@ -2,7 +2,6 @@ package com.terrabase.business;
 
 import com.alibaba.nacos.common.tls.TlsSystemConfig;
 import com.terrabase.business.util.JarLoadUtil;
-import com.terrabase.enterprise.api.EnterpriseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,8 +33,6 @@ public class BusinessApplication {
     @Autowired
     private JarLoadUtil jarLoadUtil;
 
-    // 动态加载企业服务 - 延迟初始化
-    private EnterpriseService enterpriseService;
     
     public static void main(String[] args) {
         logger.info("正在启动 Terrabase 业务应用...");
@@ -59,32 +56,20 @@ public class BusinessApplication {
             logger.info("=== Terrabase 业务应用初始化开始 ===");
             
             try {
-                // 延迟加载企业服务
-                if (enterpriseService == null) {
-                    logger.info("正在加载企业服务...");
-                    enterpriseService = jarLoadUtil.loadEnterpriseService();
-                }
+                // 检测企业模式
+                String enterpriseMode = jarLoadUtil.getEnterpriseMode();
+                logger.info("企业模式: {}", enterpriseMode);
                 
-                if (enterpriseService != null) {
-                    logger.info("企业服务加载成功:");
-                    logger.info("  服务名称: {}", enterpriseService.getServiceName());
-                    logger.info("  服务版本: {}", enterpriseService.getServiceVersion());
-                    logger.info("  服务类型: {}", enterpriseService.getServiceType());
-                    
-                    // 企业服务已加载完成，无需手动启动
-                    logger.info("企业服务加载完成");
-                        
-                    // 获取健康状态
-                    String healthStatus = enterpriseService.getHealthStatus();
-                    logger.info("企业服务健康状态: {}", healthStatus);
+                if ("commercial".equals(enterpriseMode)) {
+                    logger.info("商业版模式已启用");
                 } else {
-                    logger.error("企业服务加载失败，应用可能无法正常工作");
+                    logger.info("开源版模式已启用");
                 }
                 
             } catch (Exception e) {
-                logger.error("应用初始化过程中发生错误", e);
+                logger.error("企业模式检测失败", e);
                 // 不抛出异常，让应用继续启动
-                logger.warn("应用将在没有企业服务的情况下继续运行");
+                logger.warn("应用将在默认模式下继续运行");
             }
             
             logger.info("=== Terrabase 业务应用初始化完成 ===");

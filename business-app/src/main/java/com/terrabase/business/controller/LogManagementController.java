@@ -1,7 +1,7 @@
 package com.terrabase.business.controller;
 
 import com.terrabase.business.util.JarLoadUtil;
-import com.terrabase.enterprise.api.LogManagementService;
+import com.terrabase.enterprise.api.LogService;
 import com.terrabase.enterprise.api.dto.LogI18n;
 import com.terrabase.enterprise.api.request.LogAttributeVo;
 import com.terrabase.enterprise.api.response.ResultVo;
@@ -44,7 +44,7 @@ public class LogManagementController {
                 return ResponseEntity.badRequest().body(error);
             }
             
-            LogManagementService logService = jarLoadUtil.loadLogManagementService();
+            LogService logService = jarLoadUtil.loadLogService();
             ResultVo<Integer> result = logService.registerLogs(logs);
             
             Map<String, Object> response = new HashMap<>();
@@ -82,7 +82,7 @@ public class LogManagementController {
                 return ResponseEntity.badRequest().body(error);
             }
             
-            LogManagementService logService = jarLoadUtil.loadLogManagementService();
+            LogService logService = jarLoadUtil.loadLogService();
             ResultVo<Boolean> result = logService.registryInternational(logI18ns);
             
             Map<String, Object> response = new HashMap<>();

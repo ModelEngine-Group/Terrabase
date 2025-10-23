@@ -16,17 +16,47 @@ import java.util.concurrent.ConcurrentHashMap;
  * Terrabase SDK 主入口类
  * 提供统一的静态调用接口，支持所有企业服务功能
  * 
- * 使用示例：
+ * <h3>使用方式</h3>
  * <pre>
- * // 初始化SDK
- * TerrabaseSDK.init();
+ * // 方式1：直接使用静态方法（最简洁）
+ * String encrypted = TerrabaseSDK.cryptoService().encrypt("hello", CryptoAlgorithm.AES, "user1");
+ * String decrypted = TerrabaseSDK.cryptoService().decrypt(encrypted, CryptoAlgorithm.AES, "user1");
  * 
- * // 调用加解密服务
- * String encrypted = TerrabaseSDK.crypto().encrypt("hello", CryptoAlgorithm.AES, "user1");
- * String decrypted = TerrabaseSDK.crypto().decrypt(encrypted, CryptoAlgorithm.AES, "user1");
+ * // 方式2：通过getInstance()获取实例后调用
+ * String encrypted = TerrabaseSDK.getInstance().crypto().encrypt("hello", CryptoAlgorithm.AES, "user1");
+ * String decrypted = TerrabaseSDK.getInstance().crypto().decrypt(encrypted, CryptoAlgorithm.AES, "user1");
  * 
- * // 调用用户管理服务
- * ResultVo&lt;List&lt;LoginUserDto&gt;&gt; users = TerrabaseSDK.userManagement().getCurrentUserInfo();
+ * // 方式3：先初始化再调用
+ * TerrabaseSDK sdk = TerrabaseSDK.init();
+ * String encrypted = sdk.crypto().encrypt("hello", CryptoAlgorithm.AES, "user1");
+ * ResultVo&lt;List&lt;LoginUserDto&gt;&gt; users = sdk.userManagement().getCurrentUserInfo();
+ * 
+ * // 日志服务
+ * TerrabaseSDK.logService().log("INFO", "用户登录成功", "user1");
+ * TerrabaseSDK.logService().log("ERROR", "系统异常", "user1");
+ * 
+ * // 用户管理服务
+ * ResultVo&lt;List&lt;LoginUserDto&gt;&gt; users = TerrabaseSDK.userManagementService().getCurrentUserInfo();
+ * 
+ * // 证书管理服务
+ * ResultVo&lt;CertificateDto&gt; cert = TerrabaseSDK.certificateService().generateCertificate(request);
+ * ResultVo&lt;Boolean&gt; valid = TerrabaseSDK.certificateService().validateCertificate("cert123");
+ * 
+ * // 监控告警服务
+ * ResultVo&lt;Boolean&gt; alert = TerrabaseSDK.monitoringService().sendAlert(alertRequest);
+ * ResultVo&lt;List&lt;MetricDto&gt;&gt; metrics = TerrabaseSDK.monitoringService().getMetrics("cpu_usage", "2024-01-01", "2024-01-31");
+ * 
+ * // 获取企业模式信息
+ * String mode = TerrabaseSDK.getInstance().getEnterpriseMode();
+ * String info = TerrabaseSDK.getServiceInfo();
+ * </pre>
+ * 
+ * <h3>配置初始化方式（高级用法）</h3>
+ * <pre>
+ * // 使用自定义配置初始化
+ * TerrabaseSDKConfig config = new TerrabaseSDKConfig();
+ * config.setJarPath("/path/to/enterprise/jars");
+ * TerrabaseSDK.init(config);
  * </pre>
  * 
  * @author Yehong Pan
@@ -140,12 +170,12 @@ public class TerrabaseSDK {
     }
     
     /**
-     * 获取日志管理服务
+     * 获取日志服务
      * 
-     * @return 日志管理服务实例
+     * @return 日志服务实例
      */
-    public LogManagementService logManagement() {
-        return getService("log_management_service", jarLoadUtil::loadLogManagementService);
+    public LogService log() {
+        return getService("log_service", jarLoadUtil::loadLogService);
     }
     
     /**
@@ -166,13 +196,72 @@ public class TerrabaseSDK {
         return getService("monitoring_service", jarLoadUtil::loadMonitoringService);
     }
     
+    
+    // ==================== 静态方法（便捷调用） ====================
+    
     /**
-     * 获取企业服务
+     * 获取加解密服务（静态方法）
      * 
-     * @return 企业服务实例
+     * @return 加解密服务实例
      */
-    public EnterpriseService enterprise() {
-        return getService("enterprise_service", jarLoadUtil::loadEnterpriseService);
+    public static CryptoService cryptoService() {
+        return getInstance().crypto();
+    }
+    
+    /**
+     * 获取用户管理服务（静态方法）
+     * 
+     * @return 用户管理服务实例
+     */
+    public static UserManagementService userManagementService() {
+        return getInstance().userManagement();
+    }
+    
+    /**
+     * 获取日志服务（静态方法）
+     * 
+     * @return 日志服务实例
+     */
+    public static LogService logService() {
+        return getInstance().log();
+    }
+    
+    /**
+     * 获取证书管理服务（静态方法）
+     * 
+     * @return 证书管理服务实例
+     */
+    public static CertificateService certificateService() {
+        return getInstance().certificate();
+    }
+    
+    /**
+     * 获取监控告警服务（静态方法）
+     * 
+     * @return 监控告警服务实例
+     */
+    public static MonitoringService monitoringService() {
+        return getInstance().monitoring();
+    }
+    
+    
+    /**
+     * 获取服务信息（静态方法）
+     * 返回包含企业模式等信息的字符串
+     * 
+     * @return 服务信息字符串
+     */
+    public static String getServiceInfo() {
+        try {
+            StringBuilder info = new StringBuilder();
+            info.append("企业模式: ").append(getInstance().getEnterpriseMode()).append("\n");
+            info.append("JAR路径: ").append(getInstance().getConfig().getJarPath()).append("\n");
+            info.append("Nacos发现: ").append(getInstance().getConfig().isNacosDiscoveryEnabled() ? "启用" : "禁用");
+            return info.toString();
+        } catch (Exception e) {
+            logger.error("获取服务信息失败", e);
+            return "获取服务信息失败: " + e.getMessage();
+        }
     }
     
     /**
@@ -274,51 +363,4 @@ public class TerrabaseSDK {
         T load() throws Exception;
     }
     
-    // ==================== 便捷方法 ====================
-    
-    /**
-     * 快速加密方法
-     * 
-     * @param plaintext 明文
-     * @param algorithm 算法
-     * @param username 用户名
-     * @return 密文
-     */
-    public static String encrypt(String plaintext, CryptoAlgorithm algorithm, String username) {
-        return getInstance().crypto().encrypt(plaintext, algorithm, username);
-    }
-    
-    /**
-     * 快速解密方法
-     * 
-     * @param ciphertext 密文
-     * @param algorithm 算法
-     * @param username 用户名
-     * @return 明文
-     */
-    public static String decrypt(String ciphertext, CryptoAlgorithm algorithm, String username) {
-        return getInstance().crypto().decrypt(ciphertext, algorithm, username);
-    }
-    
-    /**
-     * 快速获取当前用户信息
-     * 
-     * @return 用户信息列表
-     */
-    public static ResultVo<List<LoginUserDto>> getCurrentUserInfo() {
-        return getInstance().userManagement().getCurrentUserInfo();
-    }
-    
-    /**
-     * 快速获取企业服务信息
-     * 
-     * @return 企业服务信息
-     */
-    public static String getServiceInfo() {
-        EnterpriseService service = getInstance().enterprise();
-        return String.format("服务名称: %s, 版本: %s, 类型: %s", 
-            service.getServiceName(), 
-            service.getServiceVersion(), 
-            service.getServiceType());
-    }
 }

@@ -1,6 +1,6 @@
 package com.terrabase.enterprise.impl.open;
 
-import com.terrabase.enterprise.api.LogManagementService;
+import com.terrabase.enterprise.api.LogService;
 import com.terrabase.enterprise.api.dto.LogI18n;
 import com.terrabase.enterprise.api.request.LogAttributeVo;
 import com.terrabase.enterprise.api.response.ResultVo;
@@ -18,9 +18,9 @@ import org.springframework.stereotype.Service;
  * @version 1.0.0
  */
 @Service
-public class OpenLogManagementServiceImpl implements LogManagementService {
+public class OpenLogServiceImpl implements LogService {
     
-    private static final Logger logger = LoggerFactory.getLogger(OpenLogManagementServiceImpl.class);
+    private static final Logger logger = LoggerFactory.getLogger(OpenLogServiceImpl.class);
     
     @Override
     public ResultVo<Integer> registerLogs(List<LogAttributeVo> logs) {

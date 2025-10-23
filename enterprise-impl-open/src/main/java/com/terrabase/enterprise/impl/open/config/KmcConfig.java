@@ -38,6 +38,13 @@ public class KmcConfig {
     
     @PostConstruct
     public void init() {
+        initialize();
+    }
+    
+    /**
+     * 手动初始化方法，用于非Spring环境
+     */
+    public void initialize() {
         logger.info("初始化KMC配置...");
         logger.info("KMC启用状态: {}", enabled);
         logger.info("默认密钥ID: {}", defaultKeyId);

@@ -6,7 +6,7 @@ import com.terrabase.enterprise.api.response.ResultVo;
 
 import java.util.List;
 
-public interface LogManagementService {
+public interface LogService {
 
     /**
      * 上报审计日志接口

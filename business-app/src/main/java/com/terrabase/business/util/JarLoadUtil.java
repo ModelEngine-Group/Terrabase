@@ -1,8 +1,6 @@
 package com.terrabase.business.util;
 
 import com.terrabase.enterprise.api.*;
-import com.terrabase.enterprise.impl.open.OpenEnterpriseServiceImpl;
-import com.terrabase.enterprise.impl.open.config.KmcConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,15 +55,6 @@ public class JarLoadUtil {
             "com.terrabase.enterprise.impl.open.OpenUserManagementServiceImpl");
     }
     
-    /**
-     * 加载日志管理服务
-     * @return 日志管理服务实例
-     */
-    public LogManagementService loadLogManagementService() {
-        return (LogManagementService) loadService("log_management_service",
-            "com.terrabase.enterprise.impl.commercial.CommercialLogManagementServiceImpl",
-            "com.terrabase.enterprise.impl.open.OpenLogManagementServiceImpl");
-    }
     
     /**
      * 加载证书管理服务
@@ -75,6 +64,16 @@ public class JarLoadUtil {
         return (CertificateService) loadService("certificate_service",
             "com.terrabase.enterprise.impl.commercial.CommercialCertificateServiceImpl",
             "com.terrabase.enterprise.impl.open.OpenCertificateServiceImpl");
+    }
+    
+    /**
+     * 加载日志服务
+     * @return 日志服务实例
+     */
+    public LogService loadLogService() {
+        return (LogService) loadService("log_service",
+            "com.terrabase.enterprise.impl.commercial.CommercialLogServiceImpl",
+            "com.terrabase.enterprise.impl.open.OpenLogServiceImpl");
     }
     
     /**
@@ -154,83 +153,6 @@ public class JarLoadUtil {
         }
     }
     
-    /**
-     * 根据lib目录下是否存在JAR包动态加载企业服务实现
-     * @return 企业服务实例，如果加载失败则返回开源版服务作为降级方案
-     */
-    public EnterpriseService loadEnterpriseService() {
-        try {
-            String cacheKey = "enterprise_service";
-            
-            // 先检查缓存
-            EnterpriseService cachedService = (EnterpriseService) serviceInstances.get(cacheKey);
-            if (cachedService != null) {
-                logger.info("从缓存中获取企业服务实例");
-                return cachedService;
-            }
-            
-            logger.info("开始检测并加载企业服务实现");
-            
-            EnterpriseService service;
-            if (isCommercialJarAvailable()) {
-                logger.info("检测到商业版JAR包，加载商业版企业服务");
-                service = loadCommercialService();
-            } else {
-                logger.info("未检测到商业版JAR包，使用开源版企业服务");
-                service = loadOpenSourceService();
-            }
-            
-            // 如果服务加载失败，使用开源版作为降级方案
-            if (service == null) {
-                logger.warn("企业服务加载失败，使用开源版作为降级方案");
-                service = loadOpenSourceService();
-            }
-            
-            // 如果开源版也加载失败，抛出异常
-            if (service == null) {
-                throw new RuntimeException("无法加载任何企业服务实现");
-            }
-            
-            // 缓存服务实例
-            serviceInstances.put(cacheKey, service);
-            logger.info("企业服务加载成功: {}", service.getServiceName());
-            
-            return service;
-            
-        } catch (Exception e) {
-            logger.error("加载企业服务失败，尝试使用开源版作为降级方案", e);
-            try {
-                // 最后的降级方案：直接实例化开源版服务
-                OpenEnterpriseServiceImpl fallbackService = new OpenEnterpriseServiceImpl();
-                
-                // 从Spring容器中获取KmcConfig并手动注入
-                try {
-                    KmcConfig kmcConfig = applicationContext.getBean(KmcConfig.class);
-                    if (kmcConfig != null) {
-                        logger.info("降级方案：从Spring容器中获取KmcConfig并注入到开源版服务");
-                        java.lang.reflect.Field kmcConfigField = OpenEnterpriseServiceImpl.class.getDeclaredField("kmcConfig");
-                        kmcConfigField.setAccessible(true);
-                        kmcConfigField.set(fallbackService, kmcConfig);
-                    } else {
-                        logger.warn("降级方案：Spring容器中没有找到KmcConfig Bean");
-                    }
-                } catch (Exception fallbackException) {
-                    logger.warn("降级方案：注入KmcConfig失败: {}", fallbackException.getMessage());
-                }
-                
-                serviceInstances.put("enterprise_service", fallbackService);
-                
-                // 降级企业服务已加载完成，无需手动启动
-                logger.info("降级企业服务已加载完成");
-                
-                logger.warn("使用开源版企业服务作为降级方案");
-                return fallbackService;
-            } catch (Exception fallbackException) {
-                logger.error("降级方案也失败了", fallbackException);
-                throw new RuntimeException("无法加载任何企业服务实现，应用无法启动", fallbackException);
-            }
-        }
-    }
     
     /**
      * 检测商业版JAR包是否可用
@@ -251,7 +173,7 @@ public class JarLoadUtil {
             URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, this.getClass().getClassLoader());
             
             // 尝试加载商业版实现类
-            Class<?> clazz = classLoader.loadClass("com.terrabase.enterprise.impl.commercial.CommercialEnterpriseServiceImpl");
+            Class<?> clazz = classLoader.loadClass("com.terrabase.enterprise.impl.commercial.CommercialCryptoServiceImpl");
             if (clazz != null) {
                 logger.debug("商业版JAR包验证成功: {}", jarFile.getAbsolutePath());
                 return true;
@@ -264,60 +186,7 @@ public class JarLoadUtil {
         return false;
     }
     
-    /**
-     * 加载商业版服务
-     * @return 商业版服务实例
-     */
-    private EnterpriseService loadCommercialService() throws Exception {
-        logger.info("正在加载商业版企业服务...");
-        
-        // 尝试从JAR包加载
-        EnterpriseService service = loadFromJar("com.terrabase.enterprise.impl.commercial.CommercialEnterpriseServiceImpl");
-        
-        if (service == null) {
-            // 如果JAR包加载失败，尝试从类路径加载
-            service = loadFromClasspath("com.terrabase.enterprise.impl.commercial.CommercialEnterpriseServiceImpl");
-        }
-        
-        if (service == null) {
-            throw new RuntimeException("无法加载商业版企业服务");
-        }
-        
-        return service;
-    }
     
-    /**
-     * 加载开源版服务
-     * @return 开源版服务实例
-     */
-    private EnterpriseService loadOpenSourceService() throws Exception {
-        logger.info("正在加载开源版企业服务...");
-        
-        // 直接实例化开源版实现（通过直接依赖）
-        OpenEnterpriseServiceImpl service = new OpenEnterpriseServiceImpl();
-        
-        // 从Spring容器中获取KmcConfig并手动注入
-        try {
-            KmcConfig kmcConfig = applicationContext.getBean(KmcConfig.class);
-            if (kmcConfig != null) {
-                logger.info("从Spring容器中获取KmcConfig并注入到开源版服务");
-                // 使用反射注入KmcConfig
-                java.lang.reflect.Field kmcConfigField = OpenEnterpriseServiceImpl.class.getDeclaredField("kmcConfig");
-                kmcConfigField.setAccessible(true);
-                kmcConfigField.set(service, kmcConfig);
-            } else {
-                logger.warn("Spring容器中没有找到KmcConfig Bean");
-            }
-        } catch (Exception e) {
-            logger.warn("注入KmcConfig失败: {}", e.getMessage());
-        }
-        
-        if (service == null) {
-            throw new RuntimeException("无法加载开源版企业服务");
-        }
-        
-        return service;
-    }
     
     /**
      * 从JAR包加载服务（通用方法）
@@ -372,8 +241,6 @@ public class JarLoadUtil {
             Object instance = defaultConstructor.newInstance();
             logger.info("使用默认构造函数创建服务实例");
             
-            // 手动注入依赖
-            injectDependencies(instance, className);
             
             return instance;
             
@@ -383,55 +250,7 @@ public class JarLoadUtil {
         }
     }
     
-    /**
-     * 从JAR包加载服务
-     * @param className 类名
-     * @return 服务实例
-     */
-    private EnterpriseService loadFromJar(String className) {
-        return (EnterpriseService) loadServiceFromJar(className);
-    }
     
-    /**
-     * 从类路径加载服务
-     * @param className 类名
-     * @return 服务实例
-     */
-    private EnterpriseService loadFromClasspath(String className) {
-        return (EnterpriseService) loadServiceFromClasspath(className);
-    }
-    
-    /**
-     * 手动注入依赖
-     * @param instance 服务实例
-     * @param className 类名
-     */
-    private void injectDependencies(Object instance, String className) {
-        try {
-            // 为 OpenCryptoServiceImpl 注入 KmcConfig
-            if (className.contains("OpenCryptoServiceImpl")) {
-                try {
-                    KmcConfig kmcConfig = applicationContext.getBean(KmcConfig.class);
-                    if (kmcConfig != null) {
-                        java.lang.reflect.Field kmcConfigField = instance.getClass().getDeclaredField("kmcConfig");
-                        kmcConfigField.setAccessible(true);
-                        kmcConfigField.set(instance, kmcConfig);
-                        logger.info("成功注入 KmcConfig 到 OpenCryptoServiceImpl");
-                    } else {
-                        logger.warn("Spring容器中没有找到 KmcConfig Bean");
-                    }
-                } catch (Exception e) {
-                    logger.warn("注入 KmcConfig 失败: {}", e.getMessage());
-                }
-            }
-            
-            // 为其他服务注入依赖（如果需要）
-            // 可以在这里添加其他服务的依赖注入逻辑
-            
-        } catch (Exception e) {
-            logger.warn("依赖注入失败: {}", e.getMessage());
-        }
-    }
     
     /**
      * 根据类名获取JAR文件名

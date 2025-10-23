@@ -1,6 +1,6 @@
 package com.terrabase.enterprise.impl.commercial;
 
-import com.terrabase.enterprise.api.LogManagementService;
+import com.terrabase.enterprise.api.LogService;
 import com.terrabase.enterprise.api.dto.*;
 import com.terrabase.enterprise.api.request.LogAttributeVo;
 import com.terrabase.enterprise.api.response.ResultVo;
@@ -20,9 +20,9 @@ import java.util.List;
  * @version 1.0.0
  */
 @Service
-public class CommercialLogManagementServiceImpl implements LogManagementService {
+public class CommercialLogServiceImpl implements LogService {
     
-    private static final Logger logger = LoggerFactory.getLogger(CommercialLogManagementServiceImpl.class);
+    private static final Logger logger = LoggerFactory.getLogger(CommercialLogServiceImpl.class);
 
     @Autowired
     private OperateLogFeignClient operateLogFeignClient;
