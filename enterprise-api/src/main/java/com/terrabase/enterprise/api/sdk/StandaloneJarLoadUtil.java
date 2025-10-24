@@ -1,4 +1,4 @@
-package com.terrabase.sdk;
+package com.terrabase.enterprise.api.sdk;
 
 import com.terrabase.enterprise.api.*;
 import org.slf4j.Logger;
@@ -32,14 +32,14 @@ public class StandaloneJarLoadUtil {
      * @param jarPath JAR包路径
      */
     public StandaloneJarLoadUtil(String jarPath) {
-        this.jarPath = jarPath != null ? jarPath : "./lib";
+        this.jarPath = jarPath != null ? jarPath : findJarPathStatic();
     }
     
     /**
      * 默认构造函数，使用默认路径
      */
     public StandaloneJarLoadUtil() {
-        this("./lib");
+        this(findJarPathStatic());
     }
     
     /**
@@ -93,6 +93,16 @@ public class StandaloneJarLoadUtil {
     }
     
     /**
+     * 加载菜单服务
+     * @return 菜单服务实例
+     */
+    public MenuService loadMenuService() {
+        return (MenuService) loadService("menu_service",
+            "com.terrabase.enterprise.impl.commercial.CommercialMenuServiceImpl",
+            "com.terrabase.enterprise.impl.open.OpenMenuServiceImpl");
+    }
+    
+    /**
      * 通用服务加载方法
      * @param cacheKey 缓存键
      * @param commercialClassName 商业版类名
@@ -114,15 +124,22 @@ public class StandaloneJarLoadUtil {
             if (isCommercialJarAvailable()) {
                 logger.info("检测到商业版JAR包，加载商业版服务: {}", commercialClassName);
                 service = loadServiceFromJar(commercialClassName);
+            } else if (isOpenJarAvailable()) {
+                logger.info("检测到开源版JAR包，加载开源版服务: {}", openClassName);
+                service = loadServiceFromJar(openClassName);
             } else {
-                logger.info("未检测到商业版JAR包，使用开源版服务: {}", openClassName);
+                logger.info("未检测到JAR包，尝试从类路径加载开源版服务: {}", openClassName);
                 service = loadServiceFromClasspath(openClassName);
             }
             
             // 如果服务加载失败，使用开源版作为降级方案
             if (service == null) {
-                logger.warn("服务加载失败，使用开源版作为降级方案: {}", openClassName);
-                service = loadServiceFromClasspath(openClassName);
+                logger.warn("服务加载失败，尝试从JAR包加载开源版作为降级方案: {}", openClassName);
+                if (isOpenJarAvailable()) {
+                    service = loadServiceFromJar(openClassName);
+                } else {
+                    service = loadServiceFromClasspath(openClassName);
+                }
             }
             
             // 如果开源版也加载失败，抛出异常
@@ -140,8 +157,14 @@ public class StandaloneJarLoadUtil {
         } catch (Exception e) {
             logger.error("加载服务失败: {}, 尝试使用开源版作为降级方案", cacheKey, e);
             try {
-                // 最后的降级方案：直接实例化开源版服务
-                Object fallbackService = loadServiceFromClasspath(openClassName);
+                // 最后的降级方案：尝试从JAR包或类路径加载开源版服务
+                Object fallbackService = null;
+                if (isOpenJarAvailable()) {
+                    fallbackService = loadServiceFromJar(openClassName);
+                } else {
+                    fallbackService = loadServiceFromClasspath(openClassName);
+                }
+                
                 if (fallbackService != null) {
                     serviceInstances.put(cacheKey, fallbackService);
                     logger.warn("使用开源版服务作为降级方案: {}", cacheKey);
@@ -182,6 +205,38 @@ public class StandaloneJarLoadUtil {
             
         } catch (Exception e) {
             logger.debug("商业版JAR包检测失败: {}", e.getMessage());
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 检测开源版JAR包是否可用
+     * @return true如果JAR包存在且可加载
+     */
+    private boolean isOpenJarAvailable() {
+        try {
+            String jarFileName = "enterprise-impl-open-1.0.0.jar";
+            File jarFile = new File(jarPath, jarFileName);
+            
+            if (!jarFile.exists()) {
+                logger.debug("开源版JAR文件不存在: {}", jarFile.getAbsolutePath());
+                return false;
+            }
+            
+            // 尝试加载JAR包中的类来验证JAR包是否有效
+            URL jarUrl = jarFile.toURI().toURL();
+            URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, this.getClass().getClassLoader());
+            
+            // 尝试加载开源版实现类
+            Class<?> clazz = classLoader.loadClass("com.terrabase.enterprise.impl.open.OpenCryptoServiceImpl");
+            if (clazz != null) {
+                logger.debug("开源版JAR包验证成功: {}", jarFile.getAbsolutePath());
+                return true;
+            }
+            
+        } catch (Exception e) {
+            logger.debug("开源版JAR包检测失败: {}", e.getMessage());
         }
         
         return false;
@@ -276,10 +331,77 @@ public class StandaloneJarLoadUtil {
     }
     
     /**
+     * 智能查找 JAR 路径（静态方法）
+     * 支持 IntelliJ、Maven、Eclipse 等多种开发环境
+     * @return JAR 路径
+     */
+    private static String findJarPathStatic() {
+        logger.info("开始智能查找 JAR 路径...");
+        
+        // 获取当前工作目录
+        String currentDir = System.getProperty("user.dir");
+        logger.debug("当前工作目录: {}", currentDir);
+        
+        // 可能的 JAR 路径（按优先级排序）
+        String[] possiblePaths = {
+            "lib",                      // 当前目录下的 lib（IntelliJ 常用）
+            "./lib",                    // 明确指定当前目录（Maven 常用）
+            "../lib",                   // 上级目录下的 lib
+            "../../lib",               // 上两级目录
+            currentDir + "/lib",        // 基于工作目录的绝对路径
+            "C:/Terrabase/lib",         // Windows 绝对路径
+            "/Terrabase/lib",           // Linux 绝对路径
+            currentDir + "/../lib",     // 工作目录的上级 lib
+            currentDir + "/../../lib"   // 工作目录的上两级 lib
+        };
+        
+        // 遍历所有可能的路径
+        for (String path : possiblePaths) {
+            logger.debug("检查路径: {}", path);
+            File libDir = new File(path);
+            
+            if (libDir.exists() && libDir.isDirectory()) {
+                File[] files = libDir.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        if (file.getName().contains("enterprise-impl") && file.getName().endsWith(".jar")) {
+                            logger.info("✅ 找到 JAR 路径: {} (包含文件: {})", path, file.getName());
+                            return path;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 如果都没找到，返回默认路径
+        logger.warn("⚠️  未找到 JAR 文件，使用默认路径: ./lib");
+        logger.info("请确保以下路径之一存在 JAR 文件:");
+        for (String path : possiblePaths) {
+            logger.info("  - {}", path);
+        }
+        return "./lib";
+    }
+    
+    /**
+     * 智能查找 JAR 路径（公共方法）
+     * 支持 IntelliJ、Maven、Eclipse 等多种开发环境
+     * @return JAR 路径
+     */
+    public static String findJarPath() {
+        return findJarPathStatic();
+    }
+    
+    /**
      * 获取当前企业模式
      * @return 企业模式
      */
     public String getEnterpriseMode() {
-        return isCommercialJarAvailable() ? "commercial" : "open";
+        if (isCommercialJarAvailable()) {
+            return "commercial";
+        } else if (isOpenJarAvailable()) {
+            return "open";
+        } else {
+            return "classpath";
+        }
     }
 }

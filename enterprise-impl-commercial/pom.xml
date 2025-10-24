@@ -24,20 +24,6 @@
     </properties>
 
     <dependencies>
-        <!-- SDK Config 依赖 -->
-        <dependency>
-            <groupId>com.terrabase</groupId>
-            <artifactId>sdk-config</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <!-- Business App SDK 依赖 -->
-        <dependency>
-            <groupId>com.terrabase</groupId>
-            <artifactId>business-app</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
         <!-- Enterprise API 依赖 -->
         <dependency>
             <groupId>com.terrabase</groupId>

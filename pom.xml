@@ -14,7 +14,6 @@
     <description>Terrabase - 企业级数据使能平台</description>
 
     <modules>
-        <module>sdk-config</module>
         <module>business-app</module>
         <module>enterprise-api</module>
         <module>enterprise-impl-commercial</module>

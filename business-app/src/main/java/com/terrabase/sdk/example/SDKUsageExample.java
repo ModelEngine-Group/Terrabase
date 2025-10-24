@@ -7,7 +7,7 @@ import com.terrabase.enterprise.api.request.RegisterEventDefineReq;
 import com.terrabase.enterprise.api.request.GetEventsParams;
 import com.terrabase.enterprise.api.dto.EventDefine;
 import com.terrabase.enterprise.api.response.ResultVo;
-import com.terrabase.sdk.TerrabaseSDK;
+import com.terrabase.enterprise.api.sdk.TerrabaseSDK;
 
 import java.util.List;
 

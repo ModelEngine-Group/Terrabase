@@ -1,4 +1,4 @@
-package com.terrabase.sdk.config;
+package com.terrabase.enterprise.api.sdk;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

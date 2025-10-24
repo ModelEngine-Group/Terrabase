@@ -1,10 +1,9 @@
-package com.terrabase.sdk;
+package com.terrabase.enterprise.api.sdk;
 
 import com.terrabase.enterprise.api.*;
 import com.terrabase.enterprise.api.CryptoAlgorithm;
 import com.terrabase.enterprise.api.dto.*;
 import com.terrabase.enterprise.api.response.ResultVo;
-import com.terrabase.sdk.config.TerrabaseSDKConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +83,14 @@ public class TerrabaseSDK {
      */
     private TerrabaseSDK() {
         this.config = TerrabaseSDKConfig.createDefault();
-        this.jarLoadUtil = new StandaloneJarLoadUtil(config.getJarPath());
+        // 使用智能路径查找，如果配置中没有指定路径
+        String jarPath = config.getJarPath();
+        if (jarPath == null || jarPath.trim().isEmpty()) {
+            jarPath = StandaloneJarLoadUtil.findJarPath();
+            config.setJarPath(jarPath);
+            logger.info("使用智能路径查找结果: {}", jarPath);
+        }
+        this.jarLoadUtil = new StandaloneJarLoadUtil(jarPath);
         logger.info("TerrabaseSDK 实例已创建");
     }
     
@@ -94,7 +100,14 @@ public class TerrabaseSDK {
      */
     private TerrabaseSDK(TerrabaseSDKConfig config) {
         this.config = config != null ? config : TerrabaseSDKConfig.createDefault();
-        this.jarLoadUtil = new StandaloneJarLoadUtil(this.config.getJarPath());
+        // 使用智能路径查找，如果配置中没有指定路径
+        String jarPath = this.config.getJarPath();
+        if (jarPath == null || jarPath.trim().isEmpty()) {
+            jarPath = StandaloneJarLoadUtil.findJarPath();
+            this.config.setJarPath(jarPath);
+            logger.info("使用智能路径查找结果: {}", jarPath);
+        }
+        this.jarLoadUtil = new StandaloneJarLoadUtil(jarPath);
         
         // 如果是商业版且启用了Nacos，则初始化Nacos配置
         initializeNacosIfNeeded();
@@ -196,6 +209,15 @@ public class TerrabaseSDK {
         return getService("monitoring_service", jarLoadUtil::loadMonitoringService);
     }
     
+    /**
+     * 获取菜单服务
+     * 
+     * @return 菜单服务实例
+     */
+    public MenuService menu() {
+        return getService("menu_service", jarLoadUtil::loadMenuService);
+    }
+    
     
     // ==================== 静态方法（便捷调用） ====================
     
@@ -242,6 +264,15 @@ public class TerrabaseSDK {
      */
     public static MonitoringService monitoringService() {
         return getInstance().monitoring();
+    }
+    
+    /**
+     * 获取菜单服务（静态方法）
+     * 
+     * @return 菜单服务实例
+     */
+    public static MenuService menuService() {
+        return getInstance().menu();
     }
     
     
