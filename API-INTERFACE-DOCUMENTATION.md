@@ -488,7 +488,18 @@ public class TerrabaseSDKExample {
             config.setNacosDiscoveryEnabled(false); // 开源版不启用Nacos
             TerrabaseSDK sdk2 = TerrabaseSDK.init(config);
             
-            // 方式3：直接使用静态方法（最简洁）
+            // 方式3：使用指定证书路径初始化（推荐用于HTTPS环境）
+            TerrabaseSDK sdkWithCert = TerrabaseSDK.initWithCertPath("/path/to/trust/cert.pem");
+            
+            // 方式4：使用证书路径和Nacos配置初始化（商业版）
+            TerrabaseSDK commercialSdk = TerrabaseSDK.initWithCertPathAndNacos(
+                "/path/to/trust/cert.pem", 
+                "https://nacos-server:8848", 
+                "nacos", 
+                "password"
+            );
+            
+            // 方式5：直接使用静态方法（最简洁）
             String encrypted = TerrabaseSDK.cryptoService().encrypt("hello", CryptoAlgorithm.AES, "user1");
             
         } catch (Exception e) {
@@ -498,7 +509,101 @@ public class TerrabaseSDKExample {
 }
 ```
 
-### 2. 加解密服务使用示例
+### 2. 证书路径配置说明
+
+#### 2.1 为什么需要配置证书路径？
+
+在HTTPS环境中，SDK需要验证服务器证书的有效性。默认情况下，SDK使用系统默认的证书路径，但在某些企业环境中，可能需要使用特定的证书文件来建立信任关系。
+
+#### 2.2 证书路径配置方式
+
+**方式1：使用便捷方法（推荐）**
+```java
+// 仅设置证书路径，使用默认配置
+TerrabaseSDK sdk = TerrabaseSDK.initWithCertPath("/path/to/trust/cert.pem");
+
+// 设置证书路径和Nacos配置（商业版）
+TerrabaseSDK sdk = TerrabaseSDK.initWithCertPathAndNacos(
+    "/path/to/trust/cert.pem", 
+    "https://nacos-server:8848", 
+    "nacos", 
+    "password"
+);
+```
+
+**方式2：使用配置对象**
+```java
+// 创建配置对象
+TerrabaseSDKConfig config = new TerrabaseSDKConfig();
+config.setTrustCertPath("/path/to/trust/cert.pem");
+config.setNacosDiscoveryEnabled(false); // 开源版
+
+// 使用配置初始化
+TerrabaseSDK sdk = TerrabaseSDK.init(config);
+```
+
+**方式3：商业版完整配置**
+```java
+// 创建商业版配置
+TerrabaseSDKConfig commercialConfig = TerrabaseSDKConfig.createCommercial(
+    "https://nacos-server:8848", 
+    "nacos", 
+    "password"
+);
+commercialConfig.setTrustCertPath("/path/to/trust/cert.pem");
+
+// 使用配置初始化
+TerrabaseSDK sdk = TerrabaseSDK.init(commercialConfig);
+```
+
+#### 2.3 证书文件格式要求
+
+- **支持格式**：PEM格式（.pem, .crt, .cer）
+- **文件内容**：包含完整的证书链
+- **文件权限**：确保应用有读取权限
+
+#### 2.4 常见证书路径示例
+
+```java
+// Linux/Unix 环境
+TerrabaseSDK.initWithCertPath("/etc/ssl/certs/ca-certificates.crt");
+TerrabaseSDK.initWithCertPath("/opt/huawei/fce/runtime/security/server_cert/nacos/nacos.crt");
+
+// Windows 环境
+TerrabaseSDK.initWithCertPath("C:\\certs\\trust-cert.pem");
+TerrabaseSDK.initWithCertPath("C:\\Program Files\\certificates\\ca-bundle.crt");
+
+// 相对路径
+TerrabaseSDK.initWithCertPath("./certs/trust-cert.pem");
+TerrabaseSDK.initWithCertPath("conf/ssl/trust-store.pem");
+```
+
+#### 2.5 证书验证失败处理
+
+如果证书路径无效或证书验证失败，SDK会记录错误日志并可能影响HTTPS连接：
+
+```java
+try {
+    TerrabaseSDK sdk = TerrabaseSDK.initWithCertPath("/invalid/path/cert.pem");
+    // 如果证书路径无效，后续HTTPS请求可能会失败
+} catch (Exception e) {
+    System.err.println("证书配置失败: " + e.getMessage());
+}
+```
+
+#### 2.6 动态证书更新
+
+如果需要动态更新证书路径，可以重新初始化SDK：
+
+```java
+// 清理现有实例
+TerrabaseSDK.getInstance().clearCache();
+
+// 重新初始化（注意：SDK是单例，需要重启应用才能生效）
+TerrabaseSDK sdk = TerrabaseSDK.initWithCertPath("/new/path/cert.pem");
+```
+
+### 3. 加解密服务使用示例
 
 ```java
 // 方式1：使用静态方法（最简洁）
@@ -518,7 +623,7 @@ TerrabaseSDK sdk = TerrabaseSDK.getInstance();
 String encrypted = sdk.crypto().encrypt(plaintext, CryptoAlgorithm.AES, "admin");
 ```
 
-### 3. 日志服务使用示例
+### 4. 日志服务使用示例
 
 ```java
 // 使用静态方法调用
@@ -550,7 +655,7 @@ if ("200".equals(result.getCode())) {
 ResultVo<Integer> result2 = TerrabaseSDK.logService().registerLogs(Arrays.asList(log));
 ```
 
-### 4. 菜单服务使用示例
+### 5. 菜单服务使用示例
 
 ```java
 // 使用静态方法获取服务
@@ -581,7 +686,7 @@ try {
 TerrabaseSDK.menuService().registerMenuInfo(menuInfo);
 ```
 
-### 5. 证书服务使用示例
+### 6. 证书服务使用示例
 
 ```java
 // 使用静态方法获取证书服务
@@ -614,7 +719,7 @@ if ("200".equals(licenseResult.getCode())) {
 ResultVo<List<CertCollectInfo>> certs = TerrabaseSDK.certificateService().listCertificateServiceList();
 ```
 
-### 6. 监控告警服务使用示例
+### 7. 监控告警服务使用示例
 
 ```java
 // 使用静态方法获取监控服务
@@ -645,7 +750,7 @@ if ("200".equals(alarmResult.getCode()) && alarmResult.getData()) {
 ResultVo<Boolean> result = TerrabaseSDK.monitoringService().sendEvents(Arrays.asList(event));
 ```
 
-### 7. 用户管理服务使用示例
+### 8. 用户管理服务使用示例
 
 ```java
 // 使用静态方法获取用户管理服务
@@ -683,7 +788,7 @@ if ("200".equals(userResult.getCode())) {
 ResultVo<List<LoginUserDto>> users = TerrabaseSDK.userManagementService().getCurrentUserInfo();
 ```
 
-### 8. 完整使用示例
+### 9. 完整使用示例
 
 ```java
 import com.terrabase.enterprise.api.sdk.TerrabaseSDK;
@@ -697,8 +802,8 @@ public class CompleteExample {
     
     public static void main(String[] args) {
         try {
-            // 初始化 SDK
-            TerrabaseSDK.init();
+            // 初始化 SDK（使用证书路径）
+            TerrabaseSDK.initWithCertPath("/path/to/trust/cert.pem");
             
             // 1. 加解密操作
             String encrypted = TerrabaseSDK.cryptoService().encrypt("Hello World", CryptoAlgorithm.AES, "admin");
@@ -738,6 +843,9 @@ public class CompleteExample {
             // 5. 用户信息查询
             ResultVo<List<LoginUserDto>> users = TerrabaseSDK.userManagementService().getCurrentUserInfo();
             
+            // 6. 证书信息查询
+            ResultVo<List<CertCollectInfo>> certs = TerrabaseSDK.certificateService().listCertificateServiceList();
+            
             System.out.println("所有操作执行完成！");
             
         } catch (Exception e) {
@@ -754,15 +862,23 @@ public class CompleteExample {
 
 1. **加密算法选择**：建议根据数据敏感程度选择合适的加密算法，AES适用于一般数据加密，RSA适用于密钥交换。
 
-2. **日志上报**：审计日志应包含完整的操作信息，便于后续审计和追踪。
+2. **证书路径配置**：
+   - 确保证书文件存在且可读
+   - 使用PEM格式的证书文件
+   - 证书路径应使用绝对路径，避免相对路径问题
+   - 在HTTPS环境中，证书配置错误可能导致连接失败
 
-3. **菜单注册**：菜单注册时需确保菜单ID唯一，避免冲突。
+3. **日志上报**：审计日志应包含完整的操作信息，便于后续审计和追踪。
 
-4. **告警信息**：告警信息应包含完整的上下文信息，便于问题定位和处理。
+4. **菜单注册**：菜单注册时需确保菜单ID唯一，避免冲突。
 
-5. **权限管理**：权限注册时应遵循最小权限原则，避免权限过度授予。
+5. **告警信息**：告警信息应包含完整的上下文信息，便于问题定位和处理。
 
-6. **错误处理**：所有接口调用都应进行适当的错误处理，根据返回的状态码进行相应处理。
+6. **权限管理**：权限注册时应遵循最小权限原则，避免权限过度授予。
+
+7. **错误处理**：所有接口调用都应进行适当的错误处理，根据返回的状态码进行相应处理。
+
+8. **SDK初始化**：SDK采用单例模式，初始化后无法更改配置，如需更改配置需要重启应用。
 
 ---
 

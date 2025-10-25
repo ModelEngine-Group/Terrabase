@@ -30,6 +30,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * String encrypted = sdk.crypto().encrypt("hello", CryptoAlgorithm.AES, "user1");
  * ResultVo&lt;List&lt;LoginUserDto&gt;&gt; users = sdk.userManagement().getCurrentUserInfo();
  * 
+ * // 方式4：使用指定证书路径初始化（推荐用于HTTPS环境）
+ * TerrabaseSDK sdkWithCert = TerrabaseSDK.initWithCertPath("/path/to/trust/cert.pem");
+ * String encrypted = sdkWithCert.crypto().encrypt("hello", CryptoAlgorithm.AES, "user1");
+ * 
+ * // 方式5：使用证书路径和Nacos配置初始化（商业版）
+ * TerrabaseSDK commercialSdk = TerrabaseSDK.initWithCertPathAndNacos(
+ *     "/path/to/trust/cert.pem", 
+ *     "https://nacos-server:8848", 
+ *     "nacos", 
+ *     "password"
+ * );
+ * 
  * // 日志服务
  * TerrabaseSDK.logService().log("INFO", "用户登录成功", "user1");
  * TerrabaseSDK.logService().log("ERROR", "系统异常", "user1");
@@ -55,7 +67,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * // 使用自定义配置初始化
  * TerrabaseSDKConfig config = new TerrabaseSDKConfig();
  * config.setJarPath("/path/to/enterprise/jars");
+ * config.setTrustCertPath("/path/to/trust/cert.pem");  // 设置证书路径
  * TerrabaseSDK.init(config);
+ * 
+ * // 商业版配置（启用Nacos）
+ * TerrabaseSDKConfig commercialConfig = TerrabaseSDKConfig.createCommercial(
+ *     "https://nacos-server:8848", "nacos", "password");
+ * commercialConfig.setTrustCertPath("/path/to/trust/cert.pem");
+ * TerrabaseSDK.init(commercialConfig);
  * </pre>
  * 
  * @author Yehong Pan
@@ -146,6 +165,51 @@ public class TerrabaseSDK {
                 if (instance == null) {
                     instance = new TerrabaseSDK(config);
                     logger.info("TerrabaseSDK 初始化完成，配置: {}", config);
+                }
+            }
+        }
+        return instance;
+    }
+    
+    /**
+     * 使用证书路径初始化SDK
+     * 此方法会检测并加载企业服务实现，并设置指定的证书路径
+     * 
+     * @param trustCertPath 信任证书路径
+     * @return SDK实例
+     */
+    public static TerrabaseSDK initWithCertPath(String trustCertPath) {
+        if (instance == null) {
+            synchronized (lock) {
+                if (instance == null) {
+                    TerrabaseSDKConfig config = TerrabaseSDKConfig.createDefault();
+                    config.setTrustCertPath(trustCertPath);
+                    instance = new TerrabaseSDK(config);
+                    logger.info("TerrabaseSDK 使用证书路径初始化完成: {}", trustCertPath);
+                }
+            }
+        }
+        return instance;
+    }
+    
+    /**
+     * 使用证书路径和Nacos配置初始化SDK（商业版）
+     * 此方法会检测并加载企业服务实现，并设置指定的证书路径和Nacos配置
+     * 
+     * @param trustCertPath 信任证书路径
+     * @param nacosServerAddr Nacos服务器地址
+     * @param nacosUsername Nacos用户名
+     * @param nacosPassword Nacos密码
+     * @return SDK实例
+     */
+    public static TerrabaseSDK initWithCertPathAndNacos(String trustCertPath, String nacosServerAddr, String nacosUsername, String nacosPassword) {
+        if (instance == null) {
+            synchronized (lock) {
+                if (instance == null) {
+                    TerrabaseSDKConfig config = TerrabaseSDKConfig.createCommercial(nacosServerAddr, nacosUsername, nacosPassword);
+                    config.setTrustCertPath(trustCertPath);
+                    instance = new TerrabaseSDK(config);
+                    logger.info("TerrabaseSDK 使用证书路径和Nacos配置初始化完成，证书路径: {}, Nacos地址: {}", trustCertPath, nacosServerAddr);
                 }
             }
         }
