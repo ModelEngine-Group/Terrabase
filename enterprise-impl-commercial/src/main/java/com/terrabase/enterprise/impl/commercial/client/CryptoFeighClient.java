@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 @Component
-@FeignClient(value = "Framework", path = "/framework/v1/crypto", contextId = "me-role",
+@FeignClient(value = "Framework", path = "/framework/v1/crypto", contextId = "me-crypto",
         configuration = {HttpsFeignClientConfig.class, FeignInnerRequestAuthInterceptor.class})
 public interface CryptoFeighClient {
     /**

@@ -15,5 +15,5 @@ import java.util.List;
         configuration = {FeignInnerRequestAuthInterceptor.class, HttpsFeignClientConfig.class})
 public interface OmsExtensionClient {
     @GetMapping("/{userName}/user-resource-groups")
-    List<ResourceGroup> getUserGroups(@PathVariable String userName);
+    List<ResourceGroup> getUserGroups(@PathVariable("userName")  String userName);
 }
