@@ -7,12 +7,11 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 独立的企业服务加载工具类（不依赖Spring容器）
- * 用于SDK中动态加载企业服务实现
+ * 独立的企业服务加载工具类（基于Spring容器）
+ * 用于SDK中动态加载企业服务实现，支持依赖注入
  * 
  * @author Yehong Pan
  * @version 1.0.0
@@ -23,8 +22,12 @@ public class StandaloneJarLoadUtil {
     
     private final String jarPath;
     
-    // 缓存已加载的实例
     private final ConcurrentHashMap<String, Object> serviceInstances = new ConcurrentHashMap<>();
+    
+    private volatile SpringJarLoader springJarLoader;
+    
+    private static final String COMMERCIAL_PACKAGE = "com.terrabase.enterprise.impl.commercial";
+    private static final String OPEN_PACKAGE = "com.terrabase.enterprise.impl.open";
     
     /**
      * 构造函数
@@ -40,6 +43,27 @@ public class StandaloneJarLoadUtil {
      */
     public StandaloneJarLoadUtil() {
         this(findJarPathStatic());
+    }
+    
+    /**
+     * 获取或创建SpringJarLoader
+     */
+    private SpringJarLoader getSpringJarLoader() {
+        if (springJarLoader == null) {
+            synchronized (this) {
+                if (springJarLoader == null) {
+                    String packageToScan = isCommercialJarAvailable() ? COMMERCIAL_PACKAGE : OPEN_PACKAGE;
+                    try {
+                        springJarLoader = new SpringJarLoader(jarPath, packageToScan);
+                        logger.info("SpringJarLoader 初始化成功，扫描包: {}", packageToScan);
+                    } catch (Exception e) {
+                        logger.error("SpringJarLoader 初始化失败，回退到反射加载", e);
+                        springJarLoader = null;
+                    }
+                }
+            }
+        }
+        return springJarLoader;
     }
     
     /**
@@ -111,7 +135,6 @@ public class StandaloneJarLoadUtil {
      */
     private Object loadService(String cacheKey, String commercialClassName, String openClassName) {
         try {
-            // 先检查缓存
             Object cachedService = serviceInstances.get(cacheKey);
             if (cachedService != null) {
                 logger.info("从缓存中获取服务实例: {}", cacheKey);
@@ -123,57 +146,57 @@ public class StandaloneJarLoadUtil {
             Object service;
             if (isCommercialJarAvailable()) {
                 logger.info("检测到商业版JAR包，加载商业版服务: {}", commercialClassName);
-                service = loadServiceFromJar(commercialClassName);
+                service = loadServiceFromSpringContainer(commercialClassName);
             } else if (isOpenJarAvailable()) {
                 logger.info("检测到开源版JAR包，加载开源版服务: {}", openClassName);
-                service = loadServiceFromJar(openClassName);
+                service = loadServiceFromSpringContainer(openClassName);
             } else {
                 logger.info("未检测到JAR包，尝试从类路径加载开源版服务: {}", openClassName);
                 service = loadServiceFromClasspath(openClassName);
             }
             
-            // 如果服务加载失败，使用开源版作为降级方案
             if (service == null) {
-                logger.warn("服务加载失败，尝试从JAR包加载开源版作为降级方案: {}", openClassName);
-                if (isOpenJarAvailable()) {
-                    service = loadServiceFromJar(openClassName);
-                } else {
-                    service = loadServiceFromClasspath(openClassName);
-                }
+                return null;
             }
             
-            // 如果开源版也加载失败，抛出异常
-            if (service == null) {
-                throw new RuntimeException("无法加载任何服务实现: " + cacheKey);
-            }
-            
-            // 缓存服务实例
             serviceInstances.put(cacheKey, service);
-            
             logger.info("服务加载成功: {}", cacheKey);
             
             return service;
             
         } catch (Exception e) {
-            logger.error("加载服务失败: {}, 尝试使用开源版作为降级方案", cacheKey, e);
-            try {
-                // 最后的降级方案：尝试从JAR包或类路径加载开源版服务
-                Object fallbackService = null;
-                if (isOpenJarAvailable()) {
-                    fallbackService = loadServiceFromJar(openClassName);
-                } else {
-                    fallbackService = loadServiceFromClasspath(openClassName);
-                }
-                
-                if (fallbackService != null) {
-                    serviceInstances.put(cacheKey, fallbackService);
-                    logger.warn("使用开源版服务作为降级方案: {}", cacheKey);
-                    return fallbackService;
-                }
-            } catch (Exception fallbackException) {
-                logger.error("降级方案也失败了: {}", cacheKey, fallbackException);
+            logger.error("加载服务失败: {}", cacheKey, e);
+        }
+    }
+
+    
+    /*
+     * 从Spring容器加载服务（支持依赖注入）
+     * @param className 类名
+     * @return 服务实例
+     */
+    private Object loadServiceFromSpringContainer(String className) {
+        SpringJarLoader loader = getSpringJarLoader();
+        if (loader == null) {
+            logger.warn("SpringJarLoader 不可用，使用反射加载");
+            return loadServiceFromJar(className);
+        }
+        
+        try {
+            Class<?> clazz = loader.getClassLoader().loadClass(className);
+            String[] beanNames = loader.getBeanNamesForType(clazz);
+            
+            if (beanNames != null && beanNames.length > 0) {
+                logger.info("从Spring容器获取Bean: {} (beanName: {})", className, beanNames[0]);
+                return loader.getBean(beanNames[0]);
             }
-            throw new RuntimeException("无法加载任何服务实现: " + cacheKey, e);
+            
+            logger.warn("在Spring容器中未找到Bean: {}，使用反射加载", className);
+            return loadServiceFromJar(className);
+            
+        } catch (Exception e) {
+            logger.warn("从Spring容器加载失败: {}，使用反射加载", e.getMessage());
+            return loadServiceFromJar(className);
         }
     }
     
@@ -192,11 +215,9 @@ public class StandaloneJarLoadUtil {
                 return false;
             }
             
-            // 尝试加载JAR包中的类来验证JAR包是否有效
             URL jarUrl = jarFile.toURI().toURL();
-            URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, this.getClass().getClassLoader());
+            IsolatedClassLoader classLoader = new IsolatedClassLoader(new URL[]{jarUrl});
             
-            // 尝试加载商业版实现类
             Class<?> clazz = classLoader.loadClass("com.terrabase.enterprise.impl.commercial.CommercialCryptoServiceImpl");
             if (clazz != null) {
                 logger.debug("商业版JAR包验证成功: {}", jarFile.getAbsolutePath());
@@ -224,11 +245,9 @@ public class StandaloneJarLoadUtil {
                 return false;
             }
             
-            // 尝试加载JAR包中的类来验证JAR包是否有效
             URL jarUrl = jarFile.toURI().toURL();
-            URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, this.getClass().getClassLoader());
+            IsolatedClassLoader classLoader = new IsolatedClassLoader(new URL[]{jarUrl});
             
-            // 尝试加载开源版实现类
             Class<?> clazz = classLoader.loadClass("com.terrabase.enterprise.impl.open.OpenCryptoServiceImpl");
             if (clazz != null) {
                 logger.debug("开源版JAR包验证成功: {}", jarFile.getAbsolutePath());
@@ -254,27 +273,27 @@ public class StandaloneJarLoadUtil {
         try {
             String jarFileName = getJarFileName(className);
             File jarFile = new File(jarPath, jarFileName);
-            
+
             if (!jarFile.exists()) {
                 logger.warn("JAR文件不存在: {}", jarFile.getAbsolutePath());
                 return null;
             }
-            
+
             logger.info("从JAR文件加载: {}", jarFile.getAbsolutePath());
-            
+
             URL jarUrl = jarFile.toURI().toURL();
-            URLClassLoader classLoader = new URLClassLoader(new URL[]{jarUrl}, this.getClass().getClassLoader());
-            
+            // 使用 PluginClassLoader，它会让框架类（包括接口）从父类加载器加载
+            PluginClassLoader classLoader = new PluginClassLoader(new URL[]{jarUrl}, Thread.currentThread().getContextClassLoader());
+
             Class<?> clazz = classLoader.loadClass(className);
-            
-            // 仅使用默认构造函数创建实例
+
             Constructor<?> defaultConstructor = clazz.getDeclaredConstructor();
             defaultConstructor.setAccessible(true);
             Object instance = defaultConstructor.newInstance();
-            logger.info("使用默认构造函数创建商业版服务实例");
-            
+            logger.info("使用默认构造函数创建服务实例");
+
             return instance;
-            
+
         } catch (Exception e) {
             logger.warn("从JAR包加载失败: {}", e.getMessage());
             return null;
@@ -352,7 +371,11 @@ public class StandaloneJarLoadUtil {
             "C:/Terrabase/lib",         // Windows 绝对路径
             "/Terrabase/lib",           // Linux 绝对路径
             currentDir + "/../lib",     // 工作目录的上级 lib
-            currentDir + "/../../lib"   // 工作目录的上两级 lib
+            currentDir + "/../../lib",  // 工作目录的上两级 lib
+            currentDir + "/enterprise-impl-open/target",  // Maven 构建输出目录
+            currentDir + "/enterprise-impl-commercial/target",  // Maven 构建输出目录
+            currentDir + "/../enterprise-impl-open/target",  // Maven 构建输出目录
+            currentDir + "/../enterprise-impl-commercial/target"  // Maven 构建输出目录
         };
         
         // 遍历所有可能的路径

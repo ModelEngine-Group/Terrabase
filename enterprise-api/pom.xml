@@ -60,6 +60,12 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
+        <!-- Spring Cloud OpenFeign -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
         <!-- 加密相关依赖（用于SDK功能） -->
         <dependency>
             <groupId>org.bouncycastle</groupId>
