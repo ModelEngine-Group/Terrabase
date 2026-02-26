@@ -18,6 +18,7 @@
         <module>enterprise-api</module>
         <module>enterprise-impl-commercial</module>
         <module>enterprise-impl-open</module>
+        <module>sdk-example</module>
     </modules>
 
     <properties>
